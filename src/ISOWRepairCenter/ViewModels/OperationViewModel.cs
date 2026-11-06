@@ -1,6 +1,6 @@
-using WindowsRepairCenter.Core;
+using ISOWRepairCenter.Core;
 
-namespace WindowsRepairCenter.ViewModels;
+namespace ISOWRepairCenter.ViewModels;
 
 public sealed class OperationViewModel : ObservableObject
 {
@@ -34,6 +34,5 @@ public sealed class OperationViewModel : ObservableObject
         ["update-reset"]=("Windows Update bileşenlerini sıfırla","Update servislerini durdurur, eski önbellekleri yeniden adlandırır ve servisleri başlatır.","İndirilen güncellemeler silinir; yeniden başlatma gerekir."),
         ["chkdsk-fix"]=("CHKDSK onarımını planla","Sistem birimi için sonraki yeniden başlatmada CHKDSK /f planlar.","Dosya sistemi metaverisini onarır; Windows denetimi bitirmelidir."),
         ["bcd-backup"]=("BCD yedekle ve doğrula","Mevcut BCD deposunu dışa aktarır ve kayıtları doğrular.","Geri dönüş yedeği oluşturur; etkin önyükleme yapılandırmasını değiştirmez."),
-        ["bcdboot"]=("BCDBoot ile önyükleme dosyalarını yeniden oluştur","Seçilen Windows dizininden seçilen EFI hedefine önyükleme dosyalarını kurar.","Yanlış kaynak veya EFI hedefi Windows'un açılmamasına yol açabilir.")
     };
 }

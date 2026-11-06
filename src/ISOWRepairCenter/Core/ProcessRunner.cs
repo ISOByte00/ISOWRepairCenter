@@ -1,18 +1,25 @@
 using System.Diagnostics;
 
-namespace WindowsRepairCenter.Core;
+namespace ISOWRepairCenter.Core;
 
-public sealed class ProcessRunner
+public interface IProcessRunner
+{
+    Task<StepResult> RunAsync(CommandStep step, string outputFile, Action<string> onOutput, CancellationToken cancellationToken);
+}
+
+public sealed class ProcessRunner : IProcessRunner
 {
     public async Task<StepResult> RunAsync(CommandStep step, string outputFile, Action<string> onOutput, CancellationToken cancellationToken)
     {
         var started = DateTimeOffset.Now;
-        var output = new List<string>();
+        Directory.CreateDirectory(Path.GetDirectoryName(outputFile)!);
+        using var writer = new StreamWriter(new FileStream(outputFile, FileMode.Create, FileAccess.Write, FileShare.Read), new System.Text.UTF8Encoding(false)) { AutoFlush = true };
+        var writeLock = new object();
         using var process = new Process { StartInfo = CreateStartInfo(step), EnableRaisingEvents = true };
         void Receive(object? _, DataReceivedEventArgs e)
         {
             if (e.Data is null) return;
-            lock (output) output.Add(e.Data);
+            lock (writeLock) writer.WriteLine(e.Data);
             onOutput(e.Data);
         }
 
@@ -33,19 +40,17 @@ public sealed class ProcessRunner
             {
                 if (!process.HasExited) process.Kill(entireProcessTree: true);
                 await process.WaitForExitAsync();
-                await File.WriteAllLinesAsync(outputFile, output, CancellationToken.None);
-                return new StepResult(step.DisplayName ?? step.FileName, step.Preview, null, DateTimeOffset.Now-started, true, outputFile, "Cancelled by user.", "Process tree was terminated before completion.");
+                return new StepResult(step.DisplayName ?? step.FileName, step.Preview, null, DateTimeOffset.Now-started, OperationOutcome.Cancelled, outputFile, "Cancelled by user.", "Process tree was terminated before completion.");
             }
 
-            await File.WriteAllLinesAsync(outputFile, output, CancellationToken.None);
             var failed = process.ExitCode != 0;
             var evidence = failed ? $"The tool returned exit code {process.ExitCode}; inspect the captured output." : "The tool returned exit code 0; rerun the matching diagnostic to verify the repair state.";
-            return new StepResult(step.DisplayName ?? step.FileName, step.Preview, process.ExitCode, DateTimeOffset.Now-started, false, outputFile, failed ? $"Exit code {process.ExitCode}." : null, evidence);
+            return new StepResult(step.DisplayName ?? step.FileName, step.Preview, process.ExitCode, DateTimeOffset.Now-started, failed ? OperationOutcome.Failed : OperationOutcome.Succeeded, outputFile, failed ? $"Exit code {process.ExitCode}." : null, evidence);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            await File.WriteAllLinesAsync(outputFile, output.Append(ex.ToString()), CancellationToken.None);
-            return new StepResult(step.DisplayName ?? step.FileName, step.Preview, null, DateTimeOffset.Now-started, false, outputFile, ex.Message, "The process could not be started or completed.");
+            lock (writeLock) writer.WriteLine(ex);
+            return new StepResult(step.DisplayName ?? step.FileName, step.Preview, null, DateTimeOffset.Now-started, OperationOutcome.Failed, outputFile, ex.Message, "The process could not be started or completed.");
         }
         finally
         {

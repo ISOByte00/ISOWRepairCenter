@@ -4,25 +4,25 @@ ISOWRepairCenter is an ISOByte Windows 10/11 x64 diagnostic and controlled-repai
 
 ## Build
 
-Install the .NET 8 SDK, then run:
+Install the .NET 10 SDK, then run:
 
 ```powershell
-dotnet restore WindowsRepairCenter.sln
-dotnet build WindowsRepairCenter.sln
-dotnet run --project src/WindowsRepairCenter
+dotnet restore ISOWRepairCenter.sln
+dotnet build ISOWRepairCenter.sln
+dotnet run --project src/ISOWRepairCenter
 ```
 
 The application requests administrator permission at startup.
 
 ## Portable executable
 
-Run `Publish-Portable.ps1` from PowerShell to produce a self-contained, single-file x64 executable at `dist\\WindowsRepairCenter\\WindowsRepairCenter.exe`. The generated executable does not require a separately installed .NET runtime.
+Run `Publish-Portable.ps1` from PowerShell to produce a self-contained, single-file x64 executable at `dist\\ISOWRepairCenter\\ISOWRepairCenter.exe`. The generated executable does not require a separately installed .NET runtime.
 
 ## What it does
 
 - Diagnostics: disk and NTFS status, event logs, DISM/SFC checks, Windows Update state, network state, BCD inspection, and SrtTrail collection.
 - Safe repairs: DISM plus SFC, network-stack reset, and component-store cleanup.
-- Expert repairs: Windows Update reset, scheduled CHKDSK repair, BCD backup/validation, and explicitly configured BCDBoot.
+- Expert repairs: guarded Windows Update reset, scheduled CHKDSK repair, and BCD backup/validation. BCDBoot is unavailable until its separate EFI validation wizard is implemented.
 
 Expert repairs require a second acknowledgement. The tool tries to create a restore point first, and it creates a BCD export before BCD-related work. If a restore point is unavailable, the user must explicitly decide whether to continue.
 
@@ -32,7 +32,7 @@ DISM uses Windows Update by default. If Windows Update cannot provide repair fil
 
 ## Reports
 
-Each session is stored in `%ProgramData%\WindowsRepairCenter\Sessions`. It contains raw command output, `results.json`, `report.txt`, and `report.html`.
+Each session is stored in `%ProgramData%\ISOWRepairCenter\Sessions`. It contains live raw command output, `results.json`, `report.txt`, and `report.html`.
 
 ## Safety limits
 

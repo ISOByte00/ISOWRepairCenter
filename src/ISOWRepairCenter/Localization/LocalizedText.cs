@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
-namespace WindowsRepairCenter.Localization;
+namespace ISOWRepairCenter.Localization;
 
 public sealed class LocalizedText : INotifyPropertyChanged
 {
@@ -15,7 +15,7 @@ public sealed class LocalizedText : INotifyPropertyChanged
     {
         ["en"] = new()
         {
-            ["WindowTitle"]="ISOWRepairCenter", ["AppTitle"]="ISOByte ISOWRepairCenter", ["Subtitle"]="Select only the diagnostics or repair actions you need. Every command is shown before it runs.", ["Language"]="Language", ["About"]="About", ["AboutText"]="ISOWRepairCenter\nVersion 0.3.0\n\nWindows diagnostics and controlled repair utility.\n\nCopyright © 2026 ISOByte. All rights reserved.", ["Copyright"]="Copyright © 2026 ISOByte. All rights reserved.",
+            ["WindowTitle"]="ISOWRepairCenter", ["AppTitle"]="ISOByte ISOWRepairCenter", ["Subtitle"]="Select only the diagnostics or repair actions you need. Every command is shown before it runs.", ["Language"]="Language", ["About"]="About", ["AboutText"]="ISOWRepairCenter\nVersion 0.4.0\n\nWindows diagnostics and controlled repair utility.\n\nCopyright © 2026 ISOByte. All rights reserved.", ["Copyright"]="Copyright © 2026 ISOByte. All rights reserved.",
             ["Dashboard"]="Dashboard", ["Diagnostics"]="Diagnostics", ["SafeRepairs"]="Safe Repairs", ["ExpertRepairs"]="Expert Repairs", ["Status"]="Status", ["SessionStorage"]="Session storage",
             ["SessionText"]="All command output, JSON results, and HTML/TXT reports are written under ProgramData.", ["OpenSession"]="Open last session", ["Cancel"]="Cancel active operation", ["RunDiagnostics"]="Run selected diagnostics",
             ["DismSource"]="Optional DISM repair source", ["DismHint"]="Leave blank to let DISM use Windows Update. If that fails, provide a compatible mounted ISO/WIM/ESD source.", ["RunSafe"]="Run selected safe repairs",
@@ -24,7 +24,7 @@ public sealed class LocalizedText : INotifyPropertyChanged
         },
         ["tr"] = new()
         {
-            ["WindowTitle"]="ISOWRepairCenter", ["AppTitle"]="ISOByte ISOWRepairCenter", ["Subtitle"]="Yalnızca ihtiyacınız olan tanılama veya onarım işlemlerini seçin. Her komut çalışmadan önce gösterilir.", ["Language"]="Dil", ["About"]="Hakkında", ["AboutText"]="ISOWRepairCenter\nSürüm 0.3.0\n\nWindows tanılama ve kontrollü onarım aracı.\n\nTelif Hakkı © 2026 ISOByte. Tüm hakları saklıdır.", ["Copyright"]="Telif Hakkı © 2026 ISOByte. Tüm hakları saklıdır.",
+            ["WindowTitle"]="ISOWRepairCenter", ["AppTitle"]="ISOByte ISOWRepairCenter", ["Subtitle"]="Yalnızca ihtiyacınız olan tanılama veya onarım işlemlerini seçin. Her komut çalışmadan önce gösterilir.", ["Language"]="Dil", ["About"]="Hakkında", ["AboutText"]="ISOWRepairCenter\nSürüm 0.4.0\n\nWindows tanılama ve kontrollü onarım aracı.\n\nTelif Hakkı © 2026 ISOByte. Tüm hakları saklıdır.", ["Copyright"]="Telif Hakkı © 2026 ISOByte. Tüm hakları saklıdır.",
             ["Dashboard"]="Genel Bakış", ["Diagnostics"]="Tanılama", ["SafeRepairs"]="Güvenli Onarımlar", ["ExpertRepairs"]="Uzman Onarımlar", ["Status"]="Durum", ["SessionStorage"]="Oturum kayıtları",
             ["SessionText"]="Komut çıktıları, JSON sonuçları ve HTML/TXT raporları ProgramData altında saklanır.", ["OpenSession"]="Son oturumu aç", ["Cancel"]="Etkin işlemi iptal et", ["RunDiagnostics"]="Seçili tanılamaları çalıştır",
             ["DismSource"]="İsteğe bağlı DISM onarım kaynağı", ["DismHint"]="DISM'in Windows Update kullanması için boş bırakın. Başarısız olursa uyumlu bağlanmış ISO/WIM/ESD kaynağı belirtin.", ["RunSafe"]="Seçili güvenli onarımları çalıştır",

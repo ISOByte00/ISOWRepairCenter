@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Security.Principal;
 using System.Windows;
 
-namespace WindowsRepairCenter;
+namespace ISOWRepairCenter;
 
 public partial class App : Application
 {
@@ -23,7 +23,7 @@ public partial class App : Application
                 }
                 catch (System.ComponentModel.Win32Exception)
                 {
-                    MessageBox.Show("Administrator permission is required to run Windows repair operations.", "Windows Repair Center", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    MessageBox.Show("Administrator permission is required to run Windows repair operations.", "ISOWRepairCenter", MessageBoxButton.OK, MessageBoxImage.Warning);
                     StartupLog("Elevation request was cancelled or denied.");
                 }
                 Shutdown();
@@ -37,7 +37,7 @@ public partial class App : Application
         catch (Exception ex)
         {
             StartupLog(ex.ToString());
-            MessageBox.Show($"Windows Repair Center could not start.\n\n{ex.Message}\n\nSee startup.log for details.", "Startup error", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show($"ISOWRepairCenter could not start.\n\n{ex.Message}\n\nSee startup.log for details.", "Startup error", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown(-1);
         }
     }
@@ -52,7 +52,7 @@ public partial class App : Application
     {
         try
         {
-            var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WindowsRepairCenter");
+            var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ISOWRepairCenter");
             Directory.CreateDirectory(directory);
             File.AppendAllText(Path.Combine(directory, "startup.log"), $"{DateTimeOffset.Now:O} {message}{Environment.NewLine}");
         }

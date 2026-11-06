@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
-namespace WindowsRepairCenter.ViewModels;
+namespace ISOWRepairCenter.ViewModels;
 
 public abstract class ObservableObject : INotifyPropertyChanged
 {

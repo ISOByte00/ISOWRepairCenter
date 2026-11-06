@@ -1,7 +1,7 @@
 using System.Windows;
-using WindowsRepairCenter.ViewModels;
+using ISOWRepairCenter.ViewModels;
 
-namespace WindowsRepairCenter;
+namespace ISOWRepairCenter;
 
 public partial class MainWindow : Window
 {

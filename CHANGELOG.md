@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0
+
+- Renamed solution, projects, namespaces, session storage, and publish output to ISOWRepairCenter.
+- Migrated the application to .NET 10 LTS.
+- Added structured operation outcomes and live output-file streaming.
+- Hardened Windows Update reset cleanup and made event filtering language-independent.
+- Removed BCDBoot from the general expert-operation list pending a guarded EFI wizard.
+
 ## 0.3.0
 
 - Renamed the application to ISOByte ISOWRepairCenter.

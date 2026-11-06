@@ -1,15 +1,20 @@
 using System.Collections.ObjectModel;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Windows;
-using WindowsRepairCenter.Core;
-using WindowsRepairCenter.Localization;
+using System.Windows.Threading;
+using ISOWRepairCenter.Core;
+using ISOWRepairCenter.Localization;
 
-namespace WindowsRepairCenter.ViewModels;
+namespace ISOWRepairCenter.ViewModels;
 
 public sealed class MainViewModel : ObservableObject
 {
     private readonly SessionStore _store = new();
     private readonly ProcessRunner _runner = new();
+    private readonly ConcurrentQueue<string> _pendingLog = new();
+    private readonly DispatcherTimer _logTimer;
+    private const int MaxLiveLogCharacters = 200_000;
     private CancellationTokenSource? _cancellation;
     private string _status = string.Empty;
     private string _liveLog = string.Empty;
@@ -44,6 +49,9 @@ public sealed class MainViewModel : ObservableObject
         Diagnostics = new(all.Where(x => x.Operation.Category == OperationCategory.Diagnostic));
         SafeRepairs = new(all.Where(x => x.Operation.Category == OperationCategory.SafeRepair));
         ExpertRepairs = new(all.Where(x => x.Operation.Category == OperationCategory.ExpertRepair));
+        _logTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(125) };
+        _logTimer.Tick += (_, _) => FlushLog();
+        _logTimer.Start();
         SetLanguage(_selectedLanguage);
     }
 
@@ -66,11 +74,12 @@ public sealed class MainViewModel : ObservableObject
         var isExpert = selected.Any(x => x.Operation.Category == OperationCategory.ExpertRepair);
         if (!Confirm(selected, isExpert)) return;
 
-        IsRunning=true; LiveLog=string.Empty; _cancellation=new CancellationTokenSource(); _store.Start();
+        IsRunning=true; LiveLog=string.Empty; _cancellation=new CancellationTokenSource();
         var executor = new RepairExecutor(_runner, _store); var restorePoints = new RestorePointService(_runner); var results=new List<OperationResult>();
         var stoppedBeforeExecution = false;
         try
         {
+            _store.Start();
             var riskSelected = selected.Where(x => x.Operation.RequiresRestorePoint).ToList();
             if (riskSelected.Count > 0)
             {
@@ -94,9 +103,21 @@ public sealed class MainViewModel : ObservableObject
         catch (Exception ex) { WriteLog($"Application error: {ex}"); }
         finally
         {
-            await _store.SaveAsync(results); LastSession=$"{L["LastSession"]}: {_store.SessionDirectory}";
-            Status=stoppedBeforeExecution || results.Any(x => x.Cancelled) ? L["Cancelled"] : results.Count > 0 && results.All(x => x.Succeeded) ? L["Completed"] : L["CompletedWarnings"];
-            IsRunning=false; _cancellation?.Dispose(); _cancellation=null;
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(_store.SessionDirectory))
+                {
+                    await _store.SaveAsync(results);
+                    LastSession=$"{L["LastSession"]}: {_store.SessionDirectory}";
+                }
+            }
+            catch (Exception ex) { WriteLog($"Report saving failed: {ex.Message}"); }
+            finally
+            {
+                FlushLog();
+                Status=stoppedBeforeExecution || results.Any(x => x.Cancelled) ? L["Cancelled"] : results.Count > 0 && results.All(x => x.Succeeded) ? L["Completed"] : L["CompletedWarnings"];
+                IsRunning=false; _cancellation?.Dispose(); _cancellation=null;
+            }
         }
     }
 
@@ -107,7 +128,16 @@ public sealed class MainViewModel : ObservableObject
         return MessageBox.Show($"{L["Preview"]}\n\n{commands}\n\n{L["Continue"]}", L["PreviewTitle"], MessageBoxButton.YesNo, expert ? MessageBoxImage.Warning : MessageBoxImage.Question) == MessageBoxResult.Yes;
     }
 
-    private void WriteLog(string line) => Application.Current.Dispatcher.Invoke(() => LiveLog += line + Environment.NewLine);
+    private void WriteLog(string line) => _pendingLog.Enqueue(line);
+
+    private void FlushLog()
+    {
+        if (_pendingLog.IsEmpty) return;
+        var batch = new System.Text.StringBuilder();
+        while (_pendingLog.TryDequeue(out var line)) batch.AppendLine(line);
+        var next = LiveLog + batch;
+        LiveLog = next.Length <= MaxLiveLogCharacters ? next : next[^MaxLiveLogCharacters..];
+    }
 
     private void SetLanguage(string language)
     {

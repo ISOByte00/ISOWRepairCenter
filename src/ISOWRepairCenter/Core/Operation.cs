@@ -1,6 +1,7 @@
-namespace WindowsRepairCenter.Core;
+namespace ISOWRepairCenter.Core;
 
 public enum OperationCategory { Diagnostic, SafeRepair, ExpertRepair }
+public enum OperationOutcome { Succeeded, Failed, Cancelled, VerificationFailed, Skipped }
 
 public sealed record CommandStep(string FileName, IReadOnlyList<string> Arguments, string? DisplayName = null, string? StandardInput = null)
 {
@@ -29,5 +30,14 @@ public sealed class OperationInputs
     public string EfiTarget { get; init; } = string.Empty;
 }
 
-public sealed record StepResult(string Name, string Command, int? ExitCode, TimeSpan Duration, bool Cancelled, string OutputFile, string? Error, string Evidence);
-public sealed record OperationResult(string Id, string Title, DateTimeOffset StartedAt, DateTimeOffset FinishedAt, bool Succeeded, bool Cancelled, IReadOnlyList<StepResult> Steps);
+public sealed record StepResult(string Name, string Command, int? ExitCode, TimeSpan Duration, OperationOutcome Outcome, string OutputFile, string? Error, string Evidence)
+{
+    public bool Succeeded => Outcome == OperationOutcome.Succeeded;
+    public bool Cancelled => Outcome == OperationOutcome.Cancelled;
+}
+
+public sealed record OperationResult(string Id, string Title, DateTimeOffset StartedAt, DateTimeOffset FinishedAt, OperationOutcome Outcome, IReadOnlyList<StepResult> Steps)
+{
+    public bool Succeeded => Outcome == OperationOutcome.Succeeded;
+    public bool Cancelled => Outcome == OperationOutcome.Cancelled;
+}

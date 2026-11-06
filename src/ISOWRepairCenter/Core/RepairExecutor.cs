@@ -1,10 +1,10 @@
-namespace WindowsRepairCenter.Core;
+namespace ISOWRepairCenter.Core;
 
 public sealed class RepairExecutor
 {
-    private readonly ProcessRunner _runner;
+    private readonly IProcessRunner _runner;
     private readonly SessionStore _store;
-    public RepairExecutor(ProcessRunner runner, SessionStore store) { _runner=runner; _store=store; }
+    public RepairExecutor(IProcessRunner runner, SessionStore store) { _runner=runner; _store=store; }
 
     public async Task<OperationResult> ExecuteAsync(RepairOperation operation, OperationInputs inputs, int operationNumber, Action<string> writeLog, CancellationToken token)
     {
@@ -18,7 +18,7 @@ public sealed class RepairExecutor
             var backupStep = new CommandStep("bcdedit.exe", new[] { "/export", backup }, "BCD backup");
             writeLog($"> {backupStep.Preview}");
             steps.Add(await _runner.RunAsync(backupStep, _store.StepOutputPath(operationNumber, operation.Id+"_backup"), writeLog, token));
-            if (steps[^1].ExitCode != 0) return new OperationResult(operation.Id, operation.Title, started, DateTimeOffset.Now, false, steps[^1].Cancelled, steps);
+            if (!steps[^1].Succeeded) return new OperationResult(operation.Id, operation.Title, started, DateTimeOffset.Now, steps[^1].Outcome, steps);
         }
 
         var index=0;
@@ -28,9 +28,9 @@ public sealed class RepairExecutor
             writeLog($"> {step.Preview}");
             var result = await _runner.RunAsync(step, _store.StepOutputPath(operationNumber, $"{operation.Id}_{index}"), writeLog, token);
             steps.Add(result);
-            if (result.Cancelled || result.ExitCode != 0) break;
+            if (!result.Succeeded) break;
         }
-        var cancelled = steps.Any(x => x.Cancelled);
-        return new OperationResult(operation.Id, operation.Title, started, DateTimeOffset.Now, !cancelled && steps.Count > 0 && steps.All(x => x.ExitCode == 0), cancelled, steps);
+        var outcome = steps.Count == 0 ? OperationOutcome.Skipped : steps.FirstOrDefault(x => !x.Succeeded)?.Outcome ?? OperationOutcome.Succeeded;
+        return new OperationResult(operation.Id, operation.Title, started, DateTimeOffset.Now, outcome, steps);
     }
 }

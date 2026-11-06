@@ -1,0 +1,10 @@
+<Application x:Class="WindowsRepairCenter.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Application.Resources>
+    <SolidColorBrush x:Key="AppBackground" Color="#111827"/>
+    <SolidColorBrush x:Key="PanelBackground" Color="#1F2937"/>
+    <SolidColorBrush x:Key="TextBrush" Color="#F3F4F6"/>
+    <SolidColorBrush x:Key="MutedBrush" Color="#9CA3AF"/>
+    <Style TargetType="Button"><Setter Property="Margin" Value="0,0,8,0"/><Setter Property="Padding" Value="14,8"/><Setter Property="Background" Value="#2563EB"/><Setter Property="Foreground" Value="White"/><Setter Property="BorderThickness" Value="0"/></Style>
+    <Style TargetType="TabItem"><Setter Property="Padding" Value="16,8"/></Style>
+  </Application.Resources>
+</Application>

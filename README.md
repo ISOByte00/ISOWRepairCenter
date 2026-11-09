@@ -43,3 +43,5 @@ This application cannot repair failed SSD/HDD hardware, RAM faults, firmware def
 ## Manual verification matrix
 
 Verify the UI and command preview on a Windows 10 x64 and Windows 11 x64 test machine. Exercise a read-only diagnostic, a deliberately failing command, cancellation of a long-running diagnostic, restore-point failure handling, DISM source validation, BCD backup failure handling, and the restart-required expert-operation prompts. Do not automate real disk or boot repairs in tests.
+
+See [the manual test matrix](docs/ManualTestMatrix.md) for the verified and pending scenarios.

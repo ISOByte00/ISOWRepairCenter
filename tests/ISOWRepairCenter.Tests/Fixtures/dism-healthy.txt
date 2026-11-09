@@ -1,0 +1,4 @@
+Deployment Image Servicing and Management tool
+Image Version: 10.0.26300.9818
+No component store corruption detected.
+The operation completed successfully.

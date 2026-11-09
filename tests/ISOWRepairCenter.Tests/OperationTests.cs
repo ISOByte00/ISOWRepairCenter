@@ -207,6 +207,24 @@ public sealed class OperationTests
         Assert.AreEqual("Dosya sistemi dirty bit durumu", viewModel.OperationTitle);
     }
 
+    [TestMethod]
+    public void Captured_fixture_corpus_distinguishes_healthy_problem_and_unknown_outcomes()
+    {
+        var dismHealthy = Analyze("dism-health", OperationOutcome.Succeeded, Fixture("dism-healthy.txt"), Fixture("dism-healthy.txt")).Single();
+        var dismRepairable = Analyze("dism-health", OperationOutcome.Succeeded, Fixture("dism-healthy.txt"), Fixture("dism-repairable.txt")).Single();
+        var sfcHealthy = Analyze("sfc-verify", OperationOutcome.Succeeded, Fixture("sfc-healthy.txt")).Single();
+        var diskHealthy = Analyze("physical-disks", OperationOutcome.Succeeded, Fixture("physical-disk-healthy.json")).Single();
+        var diskUnhealthy = Analyze("physical-disks", OperationOutcome.Succeeded, Fixture("physical-disk-unhealthy.json")).Single();
+        var unknown = Analyze("sfc-verify", OperationOutcome.Succeeded, Fixture("unrecognized-output.txt")).Single();
+
+        Assert.AreEqual(FindingConfidence.Known, dismHealthy.Confidence);
+        Assert.AreEqual(FindingSeverity.Warning, dismRepairable.Severity);
+        Assert.AreEqual(FindingConfidence.Known, sfcHealthy.Confidence);
+        Assert.AreEqual(FindingConfidence.Known, diskHealthy.Confidence);
+        Assert.AreEqual(FindingSeverity.Critical, diskUnhealthy.Severity);
+        Assert.AreEqual(FindingConfidence.Unknown, unknown.Confidence);
+    }
+
     private static IReadOnlyList<DiagnosticFinding> Analyze(string id, OperationOutcome outcome, params string[] outputs)
     {
         var root = Path.Combine(Path.GetTempPath(), "IsoWrcTest_" + Guid.NewGuid().ToString("N"));
@@ -218,6 +236,8 @@ public sealed class OperationTests
         }
         finally { Directory.Delete(root, true); }
     }
+
+    private static string Fixture(string name) => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", name));
 
     private static OperationResult CreateResult(string id, OperationOutcome outcome, string output, string? root = null) => CreateResult(id, outcome, new[] { output }, root);
     private static OperationResult CreateResult(string id, OperationOutcome outcome, string[] outputs, string? root = null)

@@ -7,6 +7,7 @@
 - Removed the false-positive Windows Update "stopped service" finding and forced English DISM diagnostic output.
 - Added finding confidence states (Known, Unknown, ManualReviewRequired), conservative disk JSON analysis, multi-step DISM validation, and dashboard status labels.
 - Fixed SFC output decoding for UTF-16LE console output.
+- Added an anonymized diagnostic fixture corpus and a manual Windows test matrix.
 
 ## 0.4.0
 

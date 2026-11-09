@@ -6,4 +6,7 @@
     <PackageReference Include="MSTest.TestAdapter" Version="4.5.2" />
     <PackageReference Include="MSTest.TestFramework" Version="4.5.2" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="Fixtures\**\*"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+  </ItemGroup>
 </Project>

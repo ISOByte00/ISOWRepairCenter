@@ -50,6 +50,21 @@ public sealed class OperationTests
     }
 
     [TestMethod]
+    public void Windows_11_is_detected_from_build_number_not_legacy_product_name()
+    {
+        var version = WindowsVersionInfo.FromRegistryValues("Windows 10 Pro", "26300", "24H2", "9818");
+        Assert.AreEqual(26300, version.BuildNumber);
+        Assert.AreEqual("Windows 11 Pro 24H2 (build 26300.9818)", version.DisplayName);
+    }
+
+    [TestMethod]
+    public void Windows_10_is_preserved_for_pre_windows_11_builds()
+    {
+        var version = WindowsVersionInfo.FromRegistryValues("Windows 10 Pro", "19045", "22H2", "5000");
+        Assert.AreEqual("Windows 10 Pro 22H2 (build 19045.5000)", version.DisplayName);
+    }
+
+    [TestMethod]
     public void Sfc_diagnostic_uses_utf16_output_decoding()
     {
         var step = OperationCatalog.Create().Single(x => x.Id == "sfc-verify").BuildSteps(new OperationInputs()).Single();

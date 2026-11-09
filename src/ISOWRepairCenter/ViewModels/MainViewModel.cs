@@ -44,7 +44,7 @@ public sealed class MainViewModel : ObservableObject
     public string LastSession { get => _lastSession; private set => Set(ref _lastSession, value); }
     public string QuickDiagnosticsLabel => _selectedLanguage == "tr" ? "Hızlı tanılamayı çalıştır" : "Run quick diagnostics";
     public string AdministratorStatus => App.IsAdministrator() ? L["AdminEnabled"] : L["AdminUnavailable"];
-    public string WindowsStatus => Environment.OSVersion.VersionString;
+    public string WindowsStatus => WindowsVersionInfo.Current().DisplayName;
 
     public MainViewModel()
     {

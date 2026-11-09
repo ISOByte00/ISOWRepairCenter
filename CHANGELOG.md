@@ -8,6 +8,7 @@
 - Added finding confidence states (Known, Unknown, ManualReviewRequired), conservative disk JSON analysis, multi-step DISM validation, and dashboard status labels.
 - Fixed SFC output decoding for UTF-16LE console output.
 - Added an anonymized diagnostic fixture corpus and a manual Windows test matrix.
+- Detect Windows 11 from its build number instead of the legacy Windows 10 product name.
 
 ## 0.4.0
 

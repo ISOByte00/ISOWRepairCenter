@@ -5,7 +5,7 @@ public static class OperationCatalog
     public static IReadOnlyList<RepairOperation> Create() => new List<RepairOperation>
     {
         Diagnostic("system-overview", "System overview", "Windows version, installed updates, and logical volumes.",
-            Ps("Get-ComputerInfo | Select-Object WindowsProductName,WindowsVersion,OsBuildNumber,OsArchitecture | Format-List; Get-Volume | Format-Table DriveLetter,FileSystem,HealthStatus,SizeRemaining,Size -AutoSize")),
+            Ps("$cv=Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion'; $family=if([int]$cv.CurrentBuildNumber -ge 22000){'Windows 11'}else{'Windows 10'}; $name=$cv.ProductName -replace '^Windows 10',$family; [PSCustomObject]@{WindowsProductName=$name;WindowsVersion=$cv.DisplayVersion;OsBuildNumber=$cv.CurrentBuildNumber;OsArchitecture=(Get-CimInstance Win32_OperatingSystem).OSArchitecture}|Format-List; Get-Volume | Format-Table DriveLetter,FileSystem,HealthStatus,SizeRemaining,Size -AutoSize")),
         Diagnostic("physical-disks", "Physical disk health", "Physical disk media type, operational state, and storage health.",
             Ps("Get-PhysicalDisk | Select-Object FriendlyName,MediaType,HealthStatus,OperationalStatus,Size | ConvertTo-Json -Compress")),
         Diagnostic("dirty-bit", "File system dirty bit", "Checks whether the system volume is marked for file system repair.",

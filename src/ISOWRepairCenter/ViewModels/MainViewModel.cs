@@ -60,7 +60,7 @@ public sealed class MainViewModel : ObservableObject
             var warnings = Findings.Count(x => x.Severity == FindingSeverity.Warning);
             var review = Findings.Count(x => x.Finding.Confidence != FindingConfidence.Known);
             var informational = Findings.Count(x => x.Severity == FindingSeverity.Information && x.Finding.Confidence == FindingConfidence.Known);
-            return string.Format(L["FindingSummary"], critical, warnings, review, informational);
+            return string.Format(L["FindingSummary"], Findings.Count, critical, warnings, informational, review);
         }
     }
     public bool IsRunning { get => _isRunning; private set { if(Set(ref _isRunning, value)) { OnPropertyChanged(nameof(CanStart)); OnPropertyChanged(nameof(CanCancel)); } } }
@@ -121,7 +121,7 @@ public sealed class MainViewModel : ObservableObject
         IsRunning=true; LiveLog=string.Empty; _cancellation=new CancellationTokenSource();
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _runCompletion=completion;
-        var executor = new RepairExecutor(_runner, _store); var restorePoints = new RestorePointService(_runner); var results=new List<OperationResult>();
+        var executor = new RepairExecutor(_runner, _store); var verifier = new PostRepairVerifier(_runner, _store); var restorePoints = new RestorePointService(_runner); var results=new List<OperationResult>(); var verifications = new List<RepairVerificationResult>();
         var stoppedBeforeExecution = false;
         try
         {
@@ -144,12 +144,20 @@ public sealed class MainViewModel : ObservableObject
                 number++; Status=$"{L["Running"]} {number}/{selected.Count}: {item.Title}"; WriteLog($"\n[{DateTime.Now:T}] {item.Title}");
                 var result=await executor.ExecuteAsync(item.Operation, inputs, number, WriteLog, _cancellation.Token); results.Add(result);
                 if (result.Cancelled) break;
+                if (result.Succeeded && RepairVerificationCatalog.For(item.Operation.Id).Count > 0)
+                {
+                    Status = L["RunningVerification"];
+                    WriteLog($"\n[{DateTime.Now:T}] {L["RunningVerification"]}: {item.Title}");
+                    var verification = await verifier.VerifyAsync(item.Operation, number, WriteLog, _cancellation.Token);
+                    verifications.Add(verification);
+                    if (verification.Outcome == VerificationOutcome.Cancelled) break;
+                }
             }
         }
         catch (Exception ex) { WriteLog($"Application error: {ex}"); }
         finally
         {
-            var findings = DiagnosticAnalyzer.Analyze(results);
+            var findings = DiagnosticAnalyzer.Analyze(results).Concat(verifications.SelectMany(x => x.Findings)).ToArray();
             Findings.Clear();
             foreach (var finding in findings) Findings.Add(new DiagnosticFindingViewModel(finding, _selectedLanguage));
             OnPropertyChanged(nameof(FindingSummary));
@@ -157,7 +165,7 @@ public sealed class MainViewModel : ObservableObject
             {
                 if (!string.IsNullOrWhiteSpace(_store.SessionDirectory))
                 {
-                    await _store.SaveAsync(results, findings);
+                    await _store.SaveAsync(results, findings, verifications);
                     LastSession=$"{L["LastSession"]}: {_store.SessionDirectory}";
                 }
             }
@@ -165,7 +173,7 @@ public sealed class MainViewModel : ObservableObject
             finally
             {
                 FlushLog();
-                Status=stoppedBeforeExecution || results.Any(x => x.Cancelled) ? L["Cancelled"] : results.Count > 0 && results.All(x => x.Succeeded) ? L["Completed"] : L["CompletedWarnings"];
+                Status=stoppedBeforeExecution || results.Any(x => x.Cancelled) ? L["Cancelled"] : results.Count > 0 && results.All(x => x.Succeeded) && verifications.All(x => x.Outcome is VerificationOutcome.Verified or VerificationOutcome.NotApplicable) ? L["Completed"] : L["CompletedWarnings"];
                 IsRunning=false; _cancellation?.Dispose(); _cancellation=null;
                 completion.TrySetResult();
                 if (ReferenceEquals(_runCompletion, completion)) _runCompletion=null;
@@ -175,7 +183,11 @@ public sealed class MainViewModel : ObservableObject
 
     private bool Confirm(IReadOnlyList<OperationViewModel> selected, bool expert)
     {
-        var commands = string.Join(Environment.NewLine, selected.SelectMany(x => x.Operation.BuildSteps(new OperationInputs { DismSource=DismSource, WindowsSource=WindowsSource, EfiTarget=EfiTarget })).Select(x => x.Preview));
+        var inputs = new OperationInputs { DismSource=DismSource, WindowsSource=WindowsSource, EfiTarget=EfiTarget };
+        var repairCommands = selected.SelectMany(x => x.Operation.BuildSteps(inputs)).Select(x => x.Preview);
+        var verificationCommands = selected.SelectMany(x => RepairVerificationCatalog.For(x.Operation.Id)).SelectMany(x => x.Steps).Select(x => x.Preview).ToArray();
+        var commands = string.Join(Environment.NewLine, repairCommands);
+        if (verificationCommands.Length > 0) commands += $"\n\n{L["PostRepairVerification"]}\n" + string.Join(Environment.NewLine, verificationCommands);
         if (expert && MessageBox.Show(L["ExpertConfirm"], L["ExpertTitle"], MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return false;
         return MessageBox.Show($"{L["Preview"]}\n\n{commands}\n\n{L["Continue"]}", L["PreviewTitle"], MessageBoxButton.YesNo, expert ? MessageBoxImage.Warning : MessageBoxImage.Question) == MessageBoxResult.Yes;
     }

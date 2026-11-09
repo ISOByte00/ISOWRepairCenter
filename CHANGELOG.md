@@ -7,6 +7,8 @@
 - Added an instant Diagnostics search box without changing selections or run behavior.
 - Added a localized Dashboard finding summary and severity-specific visual labels.
 - Added evidence-linked guided repair suggestions for DISM and SFC integrity findings; suggestions never select or start a repair.
+- Added a separate, testable post-repair verification model for the DISM/SFC repair workflow; it is not yet wired to execute from the UI.
+- Wired the DISM/SFC post-repair verification into the user-approved Safe Repairs flow, command preview, session report, and separate verification JSON report.
 
 ## 0.5.0
 

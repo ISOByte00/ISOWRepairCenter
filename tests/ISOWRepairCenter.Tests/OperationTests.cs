@@ -131,6 +131,7 @@ public sealed class OperationTests
         await store.SaveAsync(new[] { new OperationResult("test", "Test", DateTimeOffset.Now, DateTimeOffset.Now, OperationOutcome.Succeeded, Array.Empty<StepResult>()) });
         Assert.IsTrue(File.Exists(Path.Combine(store.SessionDirectory, "results.json")));
         Assert.IsTrue(File.Exists(Path.Combine(store.SessionDirectory, "findings.json")));
+        Assert.IsTrue(File.Exists(Path.Combine(store.SessionDirectory, "verifications.json")));
         Assert.IsTrue(File.Exists(Path.Combine(store.SessionDirectory, "report.txt")));
         Assert.IsTrue(File.Exists(Path.Combine(store.SessionDirectory, "report.html")));
         Directory.Delete(root, true);
@@ -256,6 +257,20 @@ public sealed class OperationTests
     }
 
     [TestMethod]
+    public async Task Post_repair_verifier_keeps_verified_and_failed_results_separate_from_repair_execution()
+    {
+        var store = CreateStore();
+        var repair = OperationCatalog.Create().Single(x => x.Id == "system-file-repair");
+        var verified = await new PostRepairVerifier(new VerificationRunner("Windows Resource Protection did not find any integrity violations."), store).VerifyAsync(repair, 1, _ => { }, CancellationToken.None);
+        var failed = await new PostRepairVerifier(new VerificationRunner("Windows Resource Protection found integrity violations."), store).VerifyAsync(repair, 2, _ => { }, CancellationToken.None);
+
+        Assert.AreEqual(VerificationOutcome.Verified, verified.Outcome);
+        Assert.AreEqual(VerificationOutcome.VerificationFailed, failed.Outcome);
+        Assert.AreEqual(2, verified.Checks.Count);
+        Assert.IsTrue(failed.Findings.Any(x => x.Code == "system-files-warning"));
+    }
+
+    [TestMethod]
     public void Findings_are_sorted_by_severity_then_confidence()
     {
         var results = new[]
@@ -355,5 +370,15 @@ public sealed class OperationTests
     {
         public Task<StepResult> RunAsync(CommandStep step, string outputFile, Action<string> onOutput, CancellationToken cancellationToken) =>
             Task.FromResult(new StepResult(step.FileName, step.Preview, outcome == OperationOutcome.Succeeded ? 0 : 1, TimeSpan.Zero, outcome, outputFile, null, "Fake result."));
+    }
+
+    private sealed class VerificationRunner(string sfcOutput) : IProcessRunner
+    {
+        public Task<StepResult> RunAsync(CommandStep step, string outputFile, Action<string> onOutput, CancellationToken cancellationToken)
+        {
+            var output = step.FileName.Equals("sfc.exe", StringComparison.OrdinalIgnoreCase) ? sfcOutput : "No component store corruption detected.";
+            File.WriteAllText(outputFile, output);
+            return Task.FromResult(new StepResult(step.FileName, step.Preview, 0, TimeSpan.Zero, OperationOutcome.Succeeded, outputFile, null, "Fake result."));
+        }
     }
 }

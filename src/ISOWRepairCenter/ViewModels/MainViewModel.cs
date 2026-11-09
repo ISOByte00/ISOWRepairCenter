@@ -121,7 +121,7 @@ public sealed class MainViewModel : ObservableObject
         IsRunning=true; LiveLog=string.Empty; _cancellation=new CancellationTokenSource();
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _runCompletion=completion;
-        var executor = new RepairExecutor(_runner, _store); var verifier = new PostRepairVerifier(_runner, _store); var restorePoints = new RestorePointService(_runner); var results=new List<OperationResult>(); var verifications = new List<RepairVerificationResult>();
+        var executor = new RepairExecutor(_runner, _store); var baselineCapture = new PreRepairBaselineCapture(_runner, _store); var verifier = new PostRepairVerifier(_runner, _store); var restorePoints = new RestorePointService(_runner); var results=new List<OperationResult>(); var baselines = new List<RepairBaselineResult>(); var verifications = new List<RepairVerificationResult>();
         var stoppedBeforeExecution = false;
         try
         {
@@ -141,6 +141,15 @@ public sealed class MainViewModel : ObservableObject
             var number=0;
             foreach (var item in selected)
             {
+                RepairBaselineResult? baseline = null;
+                if (RepairVerificationCatalog.For(item.Operation.Id).Count > 0)
+                {
+                    Status = L["CapturingBaseline"];
+                    WriteLog($"\n[{DateTime.Now:T}] {L["CapturingBaseline"]}: {item.Title}");
+                    baseline = await baselineCapture.CaptureAsync(item.Operation, number + 1, WriteLog, _cancellation.Token);
+                    baselines.Add(baseline);
+                    if (baseline.Outcome == BaselineOutcome.Cancelled) break;
+                }
                 number++; Status=$"{L["Running"]} {number}/{selected.Count}: {item.Title}"; WriteLog($"\n[{DateTime.Now:T}] {item.Title}");
                 var result=await executor.ExecuteAsync(item.Operation, inputs, number, WriteLog, _cancellation.Token); results.Add(result);
                 if (result.Cancelled) break;
@@ -149,6 +158,7 @@ public sealed class MainViewModel : ObservableObject
                     Status = L["RunningVerification"];
                     WriteLog($"\n[{DateTime.Now:T}] {L["RunningVerification"]}: {item.Title}");
                     var verification = await verifier.VerifyAsync(item.Operation, number, WriteLog, _cancellation.Token);
+                    verification = verification with { BaselineCaptured = baseline?.Outcome == BaselineOutcome.Captured, ChangeOutcome = RepairChangeAnalyzer.Compare(baseline, verification) };
                     verifications.Add(verification);
                     if (verification.Outcome == VerificationOutcome.Cancelled) break;
                 }
@@ -165,7 +175,7 @@ public sealed class MainViewModel : ObservableObject
             {
                 if (!string.IsNullOrWhiteSpace(_store.SessionDirectory))
                 {
-                    await _store.SaveAsync(results, findings, verifications);
+                    await _store.SaveAsync(results, findings, verifications, baselines);
                     LastSession=$"{L["LastSession"]}: {_store.SessionDirectory}";
                 }
             }
@@ -184,9 +194,11 @@ public sealed class MainViewModel : ObservableObject
     private bool Confirm(IReadOnlyList<OperationViewModel> selected, bool expert)
     {
         var inputs = new OperationInputs { DismSource=DismSource, WindowsSource=WindowsSource, EfiTarget=EfiTarget };
-        var repairCommands = selected.SelectMany(x => x.Operation.BuildSteps(inputs)).Select(x => x.Preview);
+        var baselineCommands = selected.SelectMany(x => RepairVerificationCatalog.For(x.Operation.Id)).SelectMany(x => x.Steps).Select(x => x.Preview).ToArray();
+        var repairCommands = selected.SelectMany(x => x.Operation.BuildSteps(inputs)).Select(x => x.Preview).ToArray();
         var verificationCommands = selected.SelectMany(x => RepairVerificationCatalog.For(x.Operation.Id)).SelectMany(x => x.Steps).Select(x => x.Preview).ToArray();
-        var commands = string.Join(Environment.NewLine, repairCommands);
+        var commands = baselineCommands.Length > 0 ? $"{L["PreRepairBaseline"]}\n{string.Join(Environment.NewLine, baselineCommands)}\n\n" : string.Empty;
+        commands += string.Join(Environment.NewLine, repairCommands);
         if (verificationCommands.Length > 0) commands += $"\n\n{L["PostRepairVerification"]}\n" + string.Join(Environment.NewLine, verificationCommands);
         if (expert && MessageBox.Show(L["ExpertConfirm"], L["ExpertTitle"], MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return false;
         return MessageBox.Show($"{L["Preview"]}\n\n{commands}\n\n{L["Continue"]}", L["PreviewTitle"], MessageBoxButton.YesNo, expert ? MessageBoxImage.Warning : MessageBoxImage.Question) == MessageBoxResult.Yes;

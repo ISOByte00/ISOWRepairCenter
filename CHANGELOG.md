@@ -10,6 +10,8 @@
 - Added a separate, testable post-repair verification model for the DISM/SFC repair workflow; it is not yet wired to execute from the UI.
 - Wired the DISM/SFC post-repair verification into the user-approved Safe Repairs flow, command preview, session report, and separate verification JSON report.
 - Clarified that verified post-checks do not claim measured improvement without a pre-repair baseline, and report verification cancellation separately from repair cancellation.
+- Added a separate pre-repair baseline and conservative change-analysis model for the DISM/SFC repair workflow; UI execution is not yet enabled.
+- Added the user-approved pre-repair baseline to the DISM/SFC repair preview, session report, JSON artifacts, and conservative post-repair change assessment.
 
 ## 0.5.0
 

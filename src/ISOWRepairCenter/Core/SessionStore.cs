@@ -18,15 +18,17 @@ public sealed class SessionStore
 
     public string StepOutputPath(int number, string operationId) => Path.Combine(SessionDirectory, $"{number:00}_{operationId}.log");
 
-    public async Task SaveAsync(IReadOnlyList<OperationResult> results, IReadOnlyList<DiagnosticFinding>? findings = null, IReadOnlyList<RepairVerificationResult>? verifications = null)
+    public async Task SaveAsync(IReadOnlyList<OperationResult> results, IReadOnlyList<DiagnosticFinding>? findings = null, IReadOnlyList<RepairVerificationResult>? verifications = null, IReadOnlyList<RepairBaselineResult>? baselines = null)
     {
         if (string.IsNullOrWhiteSpace(SessionDirectory)) throw new InvalidOperationException("A session must be started before saving a report.");
         var json = JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented=true });
         await File.WriteAllTextAsync(Path.Combine(SessionDirectory, "results.json"), json, Encoding.UTF8);
         var resolvedFindings = findings ?? DiagnosticAnalyzer.Analyze(results);
         var resolvedVerifications = verifications ?? Array.Empty<RepairVerificationResult>();
+        var resolvedBaselines = baselines ?? Array.Empty<RepairBaselineResult>();
         await File.WriteAllTextAsync(Path.Combine(SessionDirectory, "findings.json"), JsonSerializer.Serialize(resolvedFindings, new JsonSerializerOptions { WriteIndented=true }), Encoding.UTF8);
         await File.WriteAllTextAsync(Path.Combine(SessionDirectory, "verifications.json"), JsonSerializer.Serialize(resolvedVerifications, new JsonSerializerOptions { WriteIndented=true }), Encoding.UTF8);
+        await File.WriteAllTextAsync(Path.Combine(SessionDirectory, "baselines.json"), JsonSerializer.Serialize(resolvedBaselines, new JsonSerializerOptions { WriteIndented=true }), Encoding.UTF8);
         var text = new StringBuilder("ISOByte ISOWRepairCenter session\n\n");
         if (resolvedFindings.Count > 0)
         {
@@ -38,12 +40,22 @@ public sealed class SessionStore
             }
             text.AppendLine();
         }
+        if (resolvedBaselines.Count > 0)
+        {
+            text.AppendLine("Pre-repair baseline:");
+            foreach (var baseline in resolvedBaselines)
+            {
+                text.AppendLine($"  [{baseline.Outcome}] {baseline.RepairOperationTitle}");
+                foreach (var check in baseline.Checks) text.AppendLine($"    {check.Title}: {check.Outcome}");
+            }
+            text.AppendLine();
+        }
         if (resolvedVerifications.Count > 0)
         {
             text.AppendLine("Post-repair verification:");
             foreach (var verification in resolvedVerifications)
             {
-                text.AppendLine($"  [{verification.Outcome}] {verification.RepairOperationTitle}: {verification.Summary}\n    Pre-repair baseline: {(verification.BaselineCaptured ? "captured" : "not captured")}");
+                text.AppendLine($"  [{verification.Outcome}] {verification.RepairOperationTitle}: {verification.Summary}\n    Pre-repair baseline: {(verification.BaselineCaptured ? "captured" : "not captured")}\n    Change assessment: {verification.ChangeOutcome}");
                 foreach (var check in verification.Checks) text.AppendLine($"    {check.Title}: {check.Outcome}");
             }
             text.AppendLine();

@@ -132,6 +132,7 @@ public sealed class OperationTests
         Assert.IsTrue(File.Exists(Path.Combine(store.SessionDirectory, "results.json")));
         Assert.IsTrue(File.Exists(Path.Combine(store.SessionDirectory, "findings.json")));
         Assert.IsTrue(File.Exists(Path.Combine(store.SessionDirectory, "verifications.json")));
+        Assert.IsTrue(File.Exists(Path.Combine(store.SessionDirectory, "baselines.json")));
         Assert.IsTrue(File.Exists(Path.Combine(store.SessionDirectory, "report.txt")));
         Assert.IsTrue(File.Exists(Path.Combine(store.SessionDirectory, "report.html")));
         Directory.Delete(root, true);
@@ -282,6 +283,35 @@ public sealed class OperationTests
         Assert.AreEqual(VerificationOutcome.Cancelled, cancelled.Outcome);
         Assert.AreEqual(VerificationOutcome.Unknown, failed.Outcome);
         Assert.AreEqual(VerificationOutcome.Unknown, incomplete.Outcome);
+    }
+
+    [TestMethod]
+    public async Task Pre_repair_baseline_and_change_analysis_do_not_claim_improvement_without_comparable_evidence()
+    {
+        var store = CreateStore();
+        var repair = OperationCatalog.Create().Single(x => x.Id == "system-file-repair");
+        var baseline = await new PreRepairBaselineCapture(new VerificationRunner("Windows Resource Protection found integrity violations."), store).CaptureAsync(repair, 1, _ => { }, CancellationToken.None);
+        var verified = await new PostRepairVerifier(new VerificationRunner("Windows Resource Protection did not find any integrity violations."), store).VerifyAsync(repair, 2, _ => { }, CancellationToken.None);
+        var unresolved = await new PostRepairVerifier(new VerificationRunner("Windows Resource Protection found integrity violations."), store).VerifyAsync(repair, 3, _ => { }, CancellationToken.None);
+
+        Assert.AreEqual(BaselineOutcome.Captured, baseline.Outcome);
+        Assert.AreEqual(RepairChangeOutcome.Improved, RepairChangeAnalyzer.Compare(baseline, verified));
+        Assert.AreEqual(RepairChangeOutcome.StillPresent, RepairChangeAnalyzer.Compare(baseline, unresolved));
+        Assert.AreEqual(RepairChangeOutcome.NotMeasured, RepairChangeAnalyzer.Compare(null, verified));
+    }
+
+    [TestMethod]
+    public async Task Pre_repair_baseline_cancellation_or_unknown_output_prevents_comparison()
+    {
+        var store = CreateStore();
+        var repair = OperationCatalog.Create().Single(x => x.Id == "system-file-repair");
+        var cancelled = await new PreRepairBaselineCapture(new OutcomeRunner(OperationOutcome.Cancelled), store).CaptureAsync(repair, 1, _ => { }, CancellationToken.None);
+        var unknown = await new PreRepairBaselineCapture(new VerificationRunner(string.Empty), store).CaptureAsync(repair, 2, _ => { }, CancellationToken.None);
+        var verification = await new PostRepairVerifier(new VerificationRunner("Windows Resource Protection did not find any integrity violations."), store).VerifyAsync(repair, 3, _ => { }, CancellationToken.None);
+
+        Assert.AreEqual(BaselineOutcome.Cancelled, cancelled.Outcome);
+        Assert.AreEqual(BaselineOutcome.Unknown, unknown.Outcome);
+        Assert.AreEqual(RepairChangeOutcome.NotMeasured, RepairChangeAnalyzer.Compare(unknown, verification));
     }
 
     [TestMethod]

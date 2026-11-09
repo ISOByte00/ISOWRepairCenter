@@ -1,6 +1,8 @@
 namespace ISOWRepairCenter.Core;
 
 public enum VerificationOutcome { NotApplicable, Verified, VerificationFailed, Unknown, Cancelled }
+public enum BaselineOutcome { NotApplicable, Captured, Unknown, Cancelled }
+public enum RepairChangeOutcome { NotMeasured, Improved, StillPresent, Indeterminate }
 
 public sealed record RepairVerificationResult(
     string RepairOperationId,
@@ -11,9 +13,19 @@ public sealed record RepairVerificationResult(
     IReadOnlyList<OperationResult> Checks,
     IReadOnlyList<DiagnosticFinding> Findings,
     string Summary,
-    bool BaselineCaptured = false);
+    bool BaselineCaptured = false,
+    RepairChangeOutcome ChangeOutcome = RepairChangeOutcome.NotMeasured);
 
 public sealed record VerificationCheck(string Id, string Title, IReadOnlyList<CommandStep> Steps);
+
+public sealed record RepairBaselineResult(
+    string RepairOperationId,
+    string RepairOperationTitle,
+    BaselineOutcome Outcome,
+    DateTimeOffset StartedAt,
+    DateTimeOffset FinishedAt,
+    IReadOnlyList<OperationResult> Checks,
+    IReadOnlyList<DiagnosticFinding> Findings);
 
 public static class RepairVerificationCatalog
 {
@@ -90,4 +102,58 @@ public sealed class PostRepairVerifier
         VerificationOutcome.Cancelled => "Post-repair verification was cancelled before a conclusion was reached.",
         _ => "Post-repair verification could not establish a conclusion."
     };
+}
+
+public sealed class PreRepairBaselineCapture
+{
+    private readonly IProcessRunner _runner;
+    private readonly SessionStore _store;
+
+    public PreRepairBaselineCapture(IProcessRunner runner, SessionStore store) { _runner = runner; _store = store; }
+
+    public async Task<RepairBaselineResult> CaptureAsync(RepairOperation repair, int operationNumber, Action<string> writeLog, CancellationToken token)
+    {
+        var started = DateTimeOffset.Now;
+        var plan = RepairVerificationCatalog.For(repair.Id);
+        if (plan.Count == 0) return new RepairBaselineResult(repair.Id, repair.Title, BaselineOutcome.NotApplicable, started, DateTimeOffset.Now, Array.Empty<OperationResult>(), Array.Empty<DiagnosticFinding>());
+
+        var checks = new List<OperationResult>();
+        foreach (var check in plan)
+        {
+            var checkStarted = DateTimeOffset.Now;
+            var steps = new List<StepResult>();
+            for (var index = 0; index < check.Steps.Count; index++)
+            {
+                var step = check.Steps[index];
+                writeLog($"> {step.Preview}");
+                var output = _store.StepOutputPath(operationNumber, $"{repair.Id}_baseline_{check.Id}_{index + 1}");
+                var result = await _runner.RunAsync(step, output, writeLog, token);
+                steps.Add(result);
+                if (!result.Succeeded) break;
+            }
+            var checkOutcome = steps.Count == 0 ? OperationOutcome.Skipped : steps.FirstOrDefault(x => !x.Succeeded)?.Outcome ?? OperationOutcome.Succeeded;
+            checks.Add(new OperationResult(check.Id, $"Pre-repair {check.Title}", checkStarted, DateTimeOffset.Now, checkOutcome, steps));
+            if (checkOutcome == OperationOutcome.Cancelled) break;
+        }
+
+        var findings = DiagnosticAnalyzer.Analyze(checks);
+        var outcome = checks.Any(x => x.Cancelled) ? BaselineOutcome.Cancelled : checks.Count == 0 || checks.Any(x => !x.Succeeded) || findings.Any(x => x.Confidence != FindingConfidence.Known) ? BaselineOutcome.Unknown : BaselineOutcome.Captured;
+        return new RepairBaselineResult(repair.Id, repair.Title, outcome, started, DateTimeOffset.Now, checks, findings);
+    }
+}
+
+public static class RepairChangeAnalyzer
+{
+    public static RepairChangeOutcome Compare(RepairBaselineResult? baseline, RepairVerificationResult verification)
+    {
+        if (baseline?.Outcome != BaselineOutcome.Captured) return RepairChangeOutcome.NotMeasured;
+        var baselineHadRepairableIssue = baseline.Findings.Any(x => x.Code is "component-store-warning" or "system-files-warning");
+        if (!baselineHadRepairableIssue) return RepairChangeOutcome.Indeterminate;
+        return verification.Outcome switch
+        {
+            VerificationOutcome.Verified => RepairChangeOutcome.Improved,
+            VerificationOutcome.VerificationFailed => RepairChangeOutcome.StillPresent,
+            _ => RepairChangeOutcome.Indeterminate
+        };
+    }
 }

@@ -68,7 +68,8 @@ public sealed class ProcessRunner : IProcessRunner
 
     public static ProcessStartInfo CreateStartInfo(CommandStep step)
     {
-        var info = new ProcessStartInfo { FileName=ResolveExecutable(step.FileName), UseShellExecute=false, CreateNoWindow=true, RedirectStandardInput=step.StandardInput is not null, RedirectStandardOutput=true, RedirectStandardError=true, StandardOutputEncoding=System.Text.Encoding.UTF8, StandardErrorEncoding=System.Text.Encoding.UTF8 };
+        var outputEncoding = step.OutputEncoding == CommandOutputEncoding.Utf16Le ? System.Text.Encoding.Unicode : System.Text.Encoding.UTF8;
+        var info = new ProcessStartInfo { FileName=ResolveExecutable(step.FileName), UseShellExecute=false, CreateNoWindow=true, RedirectStandardInput=step.StandardInput is not null, RedirectStandardOutput=true, RedirectStandardError=true, StandardOutputEncoding=outputEncoding, StandardErrorEncoding=outputEncoding };
         foreach (var argument in step.Arguments) info.ArgumentList.Add(Environment.ExpandEnvironmentVariables(argument));
         return info;
     }

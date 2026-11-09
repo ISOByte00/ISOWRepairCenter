@@ -3,8 +3,9 @@ namespace ISOWRepairCenter.Core;
 public enum OperationCategory { Diagnostic, SafeRepair, ExpertRepair }
 public enum OperationOutcome { Succeeded, Failed, Cancelled, VerificationFailed, Skipped }
 public enum CancellationStrategy { Immediate, CompleteBeforeCancellation }
+public enum CommandOutputEncoding { Utf8, Utf16Le }
 
-public sealed record CommandStep(string FileName, IReadOnlyList<string> Arguments, string? DisplayName = null, string? StandardInput = null, CancellationStrategy CancellationStrategy = CancellationStrategy.Immediate)
+public sealed record CommandStep(string FileName, IReadOnlyList<string> Arguments, string? DisplayName = null, string? StandardInput = null, CancellationStrategy CancellationStrategy = CancellationStrategy.Immediate, CommandOutputEncoding OutputEncoding = CommandOutputEncoding.Utf8)
 {
     public string Preview => $"{FileName} {string.Join(" ", Arguments.Select(Quote))}";
     private static string Quote(string value) => value.Contains(' ') ? $"\"{value}\"" : value;

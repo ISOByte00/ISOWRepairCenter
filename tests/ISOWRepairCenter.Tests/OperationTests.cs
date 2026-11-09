@@ -50,6 +50,15 @@ public sealed class OperationTests
     }
 
     [TestMethod]
+    public void Sfc_diagnostic_uses_utf16_output_decoding()
+    {
+        var step = OperationCatalog.Create().Single(x => x.Id == "sfc-verify").BuildSteps(new OperationInputs()).Single();
+        var startInfo = ProcessRunner.CreateStartInfo(step);
+        Assert.AreEqual(CommandOutputEncoding.Utf16Le, step.OutputEncoding);
+        Assert.AreEqual(System.Text.Encoding.Unicode.WebName, startInfo.StandardOutputEncoding?.WebName);
+    }
+
+    [TestMethod]
     public void Update_reset_uses_finally_to_restore_services()
     {
         var command = OperationCatalog.Create().Single(x => x.Id == "update-reset").BuildSteps(new OperationInputs()).Single();

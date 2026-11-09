@@ -14,7 +14,7 @@ public static class OperationCatalog
             Ps("chkdsk.exe $env:SystemDrive /scan")),
         Diagnostic("dism-health", "Component store health", "Runs DISM CheckHealth and ScanHealth without changing files.",
             Cmd("DISM.exe", "/Online", "/Cleanup-Image", "/CheckHealth", "/English"), Cmd("DISM.exe", "/Online", "/Cleanup-Image", "/ScanHealth", "/English")),
-        Diagnostic("sfc-verify", "System file verification", "Runs SFC verification without repairing system files.", Cmd("sfc.exe", "/verifyonly")),
+        Diagnostic("sfc-verify", "System file verification", "Runs SFC verification without repairing system files.", new CommandStep("sfc.exe", new[] { "/verifyonly" }, OutputEncoding: CommandOutputEncoding.Utf16Le)),
         Diagnostic("storage-events", "Storage and NTFS events", "Collects recent disk, NTFS, storage, and volume-manager System events.",
             Ps("Get-WinEvent -FilterHashtable @{LogName='System';StartTime=(Get-Date).AddDays(-14)} -ErrorAction SilentlyContinue | Where-Object {$_.ProviderName -match 'disk|ntfs|stor|volmgr|stornvme|iastor'} | Select-Object -First 100 TimeCreated,Id,ProviderName,LevelDisplayName,Message | Format-List")),
         Diagnostic("critical-events", "Critical system events", "Collects recent critical and error events from the System log.",

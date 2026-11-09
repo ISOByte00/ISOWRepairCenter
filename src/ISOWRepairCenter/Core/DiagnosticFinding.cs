@@ -41,9 +41,6 @@ public static class DiagnosticAnalyzer
                 case "physical-disks":
                     findings.Add(new("disk-health-ok", FindingSeverity.Information, "Physical disk health did not report a warning.", "Get-PhysicalDisk completed without Warning or Unhealthy.", "Continue monitoring disk health and keep backups current."));
                     break;
-                case "update-status" when output.Contains("Stopped", StringComparison.OrdinalIgnoreCase):
-                    findings.Add(new("update-service-warning", FindingSeverity.Warning, "At least one Windows Update service is stopped.", "Windows Update service status output contains Stopped.", "Review service configuration and recent Windows Update events before resetting components."));
-                    break;
                 case "network-status" when output.Contains("Direct access", StringComparison.OrdinalIgnoreCase):
                     findings.Add(new("proxy-direct", FindingSeverity.Information, "WinHTTP is configured for direct access.", "netsh reported Direct access (no proxy server).", "No proxy reset is indicated by this check."));
                     break;

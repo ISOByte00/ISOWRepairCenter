@@ -10,6 +10,7 @@ public partial class MainWindow : Window
     private MainViewModel ViewModel => (MainViewModel)DataContext;
     public MainWindow() => InitializeComponent();
     private async void RunDiagnostics_Click(object sender, RoutedEventArgs e) => await ViewModel.RunDiagnosticsAsync();
+    private async void RunQuickDiagnostics_Click(object sender, RoutedEventArgs e) => await ViewModel.RunQuickDiagnosticsAsync();
     private async void RunSafeRepairs_Click(object sender, RoutedEventArgs e) => await ViewModel.RunSafeRepairsAsync();
     private async void RunExpertRepairs_Click(object sender, RoutedEventArgs e) => await ViewModel.RunExpertRepairsAsync();
     private void Cancel_Click(object sender, RoutedEventArgs e) => ViewModel.Cancel();

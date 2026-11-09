@@ -42,6 +42,7 @@ public sealed class MainViewModel : ObservableObject
     public bool CanStart => !IsRunning;
     public bool CanCancel => IsRunning;
     public string LastSession { get => _lastSession; private set => Set(ref _lastSession, value); }
+    public string QuickDiagnosticsLabel => _selectedLanguage == "tr" ? "Hızlı tanılamayı çalıştır" : "Run quick diagnostics";
     public string AdministratorStatus => App.IsAdministrator() ? L["AdminEnabled"] : L["AdminUnavailable"];
     public string WindowsStatus => Environment.OSVersion.VersionString;
 
@@ -58,6 +59,7 @@ public sealed class MainViewModel : ObservableObject
     }
 
     public Task RunDiagnosticsAsync() => RunSelectedAsync(Diagnostics);
+    public Task RunQuickDiagnosticsAsync() => RunOperationsAsync(Diagnostics.Where(x => DiagnosticProfiles.IsQuickDiagnostic(x.Operation)).ToList());
     public Task RunSafeRepairsAsync() => RunSelectedAsync(SafeRepairs);
     public Task RunExpertRepairsAsync() => RunSelectedAsync(ExpertRepairs);
     public void Cancel() => _cancellation?.Cancel();
@@ -67,9 +69,10 @@ public sealed class MainViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(_store.SessionDirectory) && Directory.Exists(_store.SessionDirectory)) Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_store.SessionDirectory}\"") { UseShellExecute=true });
     }
 
-    private async Task RunSelectedAsync(IEnumerable<OperationViewModel> source)
+    private Task RunSelectedAsync(IEnumerable<OperationViewModel> source) => RunOperationsAsync(source.Where(x => x.IsSelected).ToList());
+
+    private async Task RunOperationsAsync(IReadOnlyList<OperationViewModel> selected)
     {
-        var selected = source.Where(x => x.IsSelected).ToList();
         if (selected.Count == 0) { MessageBox.Show(L["SelectOperation"], L["WindowTitle"], MessageBoxButton.OK, MessageBoxImage.Information); return; }
         var inputs = new OperationInputs { DismSource=DismSource.Trim(), WindowsSource=WindowsSource.Trim(), EfiTarget=EfiTarget.Trim() };
         var error = selected.Select(x => x.Operation.Validate?.Invoke(inputs)).FirstOrDefault(x => x is not null);
@@ -154,6 +157,7 @@ public sealed class MainViewModel : ObservableObject
         L.Language=language;
         Status=L["Ready"]; LastSession=L["NoSession"];
         OnPropertyChanged(nameof(AdministratorStatus));
+        OnPropertyChanged(nameof(QuickDiagnosticsLabel));
         foreach (var item in Diagnostics.Concat(SafeRepairs).Concat(ExpertRepairs)) item.SetLanguage(language);
         foreach (var finding in Findings) finding.SetLanguage(language);
     }

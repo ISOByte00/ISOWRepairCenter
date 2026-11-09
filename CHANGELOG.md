@@ -3,6 +3,8 @@
 ## Unreleased
 
 - Added structured diagnostic findings with severity, evidence, and recommended next actions.
+- Added a Quick Diagnostics profile; longer checks remain available through the custom checklist.
+- Removed the false-positive Windows Update "stopped service" finding and forced English DISM diagnostic output.
 
 ## 0.4.0
 

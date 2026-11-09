@@ -34,6 +34,21 @@ public sealed class OperationTests
     }
 
     [TestMethod]
+    public void Quick_profile_contains_only_short_read_only_checks()
+    {
+        var quickOperations = OperationCatalog.Create().Where(DiagnosticProfiles.IsQuickDiagnostic).ToList();
+        CollectionAssert.AreEquivalent(new[] { "system-overview", "physical-disks", "dirty-bit", "update-status", "network-status" }, quickOperations.Select(x => x.Id).ToArray());
+        Assert.IsTrue(quickOperations.All(x => x.Category == OperationCategory.Diagnostic));
+    }
+
+    [TestMethod]
+    public void Dism_diagnostic_forces_invariant_english_output()
+    {
+        var steps = OperationCatalog.Create().Single(x => x.Id == "dism-health").BuildSteps(new OperationInputs());
+        Assert.IsTrue(steps.All(x => x.Arguments.Contains("/English")));
+    }
+
+    [TestMethod]
     public void Update_reset_uses_finally_to_restore_services()
     {
         var command = OperationCatalog.Create().Single(x => x.Id == "update-reset").BuildSteps(new OperationInputs()).Single();

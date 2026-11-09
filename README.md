@@ -20,7 +20,7 @@ Run `Publish-Portable.ps1` from PowerShell to produce a self-contained, single-f
 
 ## What it does
 
-- Diagnostics: disk and NTFS status, event logs, DISM/SFC checks, Windows Update state, network state, BCD inspection, and SrtTrail collection.
+- Diagnostics: a Quick Diagnostics profile for common read-only checks, plus a custom checklist for disk and NTFS status, event logs, DISM/SFC checks, Windows Update state, network state, BCD inspection, and SrtTrail collection.
 - Safe repairs: DISM plus SFC, network-stack reset, and component-store cleanup.
 - Expert repairs: guarded Windows Update reset and BCD backup/validation. CHKDSK and BCDBoot are unavailable until their separate validated wizards are implemented.
 

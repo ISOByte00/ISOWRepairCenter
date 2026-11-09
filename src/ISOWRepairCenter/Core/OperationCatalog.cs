@@ -13,7 +13,7 @@ public static class OperationCatalog
         Diagnostic("chkdsk-scan", "Online NTFS scan", "Runs the non-destructive CHKDSK online scan on the system volume.",
             Ps("chkdsk.exe $env:SystemDrive /scan")),
         Diagnostic("dism-health", "Component store health", "Runs DISM CheckHealth and ScanHealth without changing files.",
-            Cmd("DISM.exe", "/Online", "/Cleanup-Image", "/CheckHealth"), Cmd("DISM.exe", "/Online", "/Cleanup-Image", "/ScanHealth")),
+            Cmd("DISM.exe", "/Online", "/Cleanup-Image", "/CheckHealth", "/English"), Cmd("DISM.exe", "/Online", "/Cleanup-Image", "/ScanHealth", "/English")),
         Diagnostic("sfc-verify", "System file verification", "Runs SFC verification without repairing system files.", Cmd("sfc.exe", "/verifyonly")),
         Diagnostic("storage-events", "Storage and NTFS events", "Collects recent disk, NTFS, storage, and volume-manager System events.",
             Ps("Get-WinEvent -FilterHashtable @{LogName='System';StartTime=(Get-Date).AddDays(-14)} -ErrorAction SilentlyContinue | Where-Object {$_.ProviderName -match 'disk|ntfs|stor|volmgr|stornvme|iastor'} | Select-Object -First 100 TimeCreated,Id,ProviderName,LevelDisplayName,Message | Format-List")),

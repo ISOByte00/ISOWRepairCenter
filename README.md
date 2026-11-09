@@ -14,6 +14,14 @@ dotnet run --project src/ISOWRepairCenter
 
 The application requests administrator permission at startup.
 
+For the release verification sequence (restore, Release build, tests, portable publish, and EXE SHA-256), run:
+
+```powershell
+.\scripts\Verify-V06.ps1
+```
+
+The script does not execute any Windows repair command.
+
 ## Portable executable
 
 Run `Publish-Portable.ps1` from PowerShell to produce a self-contained, single-file x64 executable at `dist\\ISOWRepairCenter\\ISOWRepairCenter.exe`. The generated executable does not require a separately installed .NET runtime.
@@ -35,6 +43,8 @@ DISM uses Windows Update by default. If Windows Update cannot provide repair fil
 Each session is stored in `%ProgramData%\ISOWRepairCenter\Sessions`. It contains live raw command output, `results.json`, `findings.json`, `baselines.json`, `verifications.json`, optional `safety.json`, `report.txt`, and `report.html`.
 
 Diagnostic findings distinguish severity from confidence. `Known` findings have recognized evidence; `Unknown` and `ManualReviewRequired` findings must be reviewed before deciding on a repair.
+
+For the DISM/SFC repair flow, `Verified` means the post-check recognized healthy results. `Improved` is reported only when a captured, recognized pre-repair problem changed to healthy without another tracked problem appearing. DISM and SFC change assessments are retained separately in `verifications.json` and the text/HTML reports.
 
 ## Safety limits
 

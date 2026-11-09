@@ -1,6 +1,6 @@
 namespace ISOWRepairCenter.Core;
 
-public enum VerificationOutcome { NotApplicable, Verified, VerificationFailed, Unknown, Cancelled }
+public enum VerificationOutcome { NotApplicable, Verified, VerificationFailed, Unknown, Cancelled, Deferred }
 public enum BaselineOutcome { NotApplicable, Captured, Unknown, Cancelled }
 public enum RepairChangeOutcome { NotMeasured, Improved, StillPresent, Indeterminate }
 
@@ -14,7 +14,10 @@ public sealed record RepairVerificationResult(
     IReadOnlyList<DiagnosticFinding> Findings,
     string Summary,
     bool BaselineCaptured = false,
-    RepairChangeOutcome ChangeOutcome = RepairChangeOutcome.NotMeasured);
+    RepairChangeOutcome ChangeOutcome = RepairChangeOutcome.NotMeasured,
+    RepairChangeOutcome DismChangeOutcome = RepairChangeOutcome.NotMeasured,
+    RepairChangeOutcome SfcChangeOutcome = RepairChangeOutcome.NotMeasured,
+    string ChangeEvidence = "");
 
 public sealed record VerificationCheck(string Id, string Title, IReadOnlyList<CommandStep> Steps);
 
@@ -95,11 +98,13 @@ public sealed class PostRepairVerifier
             : VerificationOutcome.Unknown;
     }
 
-    private static string SummaryFor(VerificationOutcome outcome) => outcome switch
+    internal static string SummaryFor(VerificationOutcome outcome, bool baselineCaptured = false) => outcome switch
     {
-        VerificationOutcome.Verified => "Post-repair checks completed and recognized healthy results. No pre-repair baseline was captured, so improvement was not measured.",
+        VerificationOutcome.Verified when baselineCaptured => "Post-repair checks completed and recognized healthy results. The captured baseline is available for change assessment.",
+        VerificationOutcome.Verified => "Post-repair checks completed and recognized healthy results. No comparable pre-repair baseline was captured, so improvement was not measured.",
         VerificationOutcome.VerificationFailed => "Post-repair checks completed, but at least one repaired condition is still present.",
         VerificationOutcome.Cancelled => "Post-repair verification was cancelled before a conclusion was reached.",
+        VerificationOutcome.Deferred => "Post-repair verification was deferred because a restart is required before results can be interpreted.",
         _ => "Post-repair verification could not establish a conclusion."
     };
 }
@@ -146,14 +151,61 @@ public static class RepairChangeAnalyzer
 {
     public static RepairChangeOutcome Compare(RepairBaselineResult? baseline, RepairVerificationResult verification)
     {
-        if (baseline?.Outcome != BaselineOutcome.Captured) return RepairChangeOutcome.NotMeasured;
-        var baselineHadRepairableIssue = baseline.Findings.Any(x => x.Code is "component-store-warning" or "system-files-warning");
-        if (!baselineHadRepairableIssue) return RepairChangeOutcome.Indeterminate;
-        return verification.Outcome switch
+        return Assess(baseline, verification).Overall;
+    }
+
+    public static RepairVerificationResult Apply(RepairBaselineResult? baseline, RepairVerificationResult verification)
+    {
+        var assessment = Assess(baseline, verification);
+        var baselineCaptured = baseline?.Outcome == BaselineOutcome.Captured;
+        return verification with
         {
-            VerificationOutcome.Verified => RepairChangeOutcome.Improved,
-            VerificationOutcome.VerificationFailed => RepairChangeOutcome.StillPresent,
-            _ => RepairChangeOutcome.Indeterminate
+            BaselineCaptured = baselineCaptured,
+            ChangeOutcome = assessment.Overall,
+            DismChangeOutcome = assessment.Dism,
+            SfcChangeOutcome = assessment.Sfc,
+            ChangeEvidence = assessment.Evidence,
+            Summary = PostRepairVerifier.SummaryFor(verification.Outcome, baselineCaptured)
         };
     }
+
+    private static ChangeAssessment Assess(RepairBaselineResult? baseline, RepairVerificationResult verification)
+    {
+        if (baseline?.Outcome != BaselineOutcome.Captured)
+            return new(RepairChangeOutcome.NotMeasured, RepairChangeOutcome.NotMeasured, RepairChangeOutcome.NotMeasured, "No complete, recognized pre-repair baseline was captured; change was not measured.");
+
+        var dism = CompareCheck(baseline.Findings, verification.Findings, "component-store-warning", "component-store-healthy");
+        var sfc = CompareCheck(baseline.Findings, verification.Findings, "system-files-warning", "system-files-healthy");
+        var dimensions = new[] { dism.Outcome, sfc.Outcome };
+        var baselineProblems = new[] { dism.BaselineProblem, sfc.BaselineProblem };
+        RepairChangeOutcome overall;
+        if (!baselineProblems.Any(x => x)) overall = RepairChangeOutcome.Indeterminate;
+        else if (dism.NewProblem || sfc.NewProblem) overall = RepairChangeOutcome.Indeterminate;
+        else if (dimensions.Any(x => x == RepairChangeOutcome.Indeterminate)) overall = RepairChangeOutcome.Indeterminate;
+        else if (dimensions.Any(x => x == RepairChangeOutcome.StillPresent)) overall = RepairChangeOutcome.StillPresent;
+        else if (dimensions.Any(x => x == RepairChangeOutcome.Improved)) overall = RepairChangeOutcome.Improved;
+        else overall = RepairChangeOutcome.Indeterminate;
+
+        return new(overall, dism.Outcome, sfc.Outcome,
+            $"DISM: {dism.Evidence} SFC: {sfc.Evidence} Overall: {overall}.");
+    }
+
+    private static CheckChange CompareCheck(IReadOnlyList<DiagnosticFinding> baseline, IReadOnlyList<DiagnosticFinding> verification, string warningCode, string healthyCode)
+    {
+        var beforeWarning = baseline.Any(x => x.Code == warningCode && x.Confidence == FindingConfidence.Known);
+        var beforeHealthy = baseline.Any(x => x.Code == healthyCode && x.Confidence == FindingConfidence.Known);
+        var afterWarning = verification.Any(x => x.Code == warningCode && x.Confidence == FindingConfidence.Known);
+        var afterHealthy = verification.Any(x => x.Code == healthyCode && x.Confidence == FindingConfidence.Known);
+        var afterKnown = afterWarning || afterHealthy;
+
+        if (!afterKnown) return new(RepairChangeOutcome.Indeterminate, beforeWarning, false, "post-check was missing, failed, cancelled, or unrecognized.");
+        if (beforeWarning && afterHealthy) return new(RepairChangeOutcome.Improved, true, false, "recognized problem changed to recognized healthy.");
+        if (beforeWarning && afterWarning) return new(RepairChangeOutcome.StillPresent, true, false, "recognized problem is still present.");
+        if (beforeHealthy && afterWarning) return new(RepairChangeOutcome.Indeterminate, false, true, "a new recognized problem appeared after a healthy baseline.");
+        if (beforeHealthy && afterHealthy) return new(RepairChangeOutcome.NotMeasured, false, false, "healthy before and after; this is verification, not improvement.");
+        return new(RepairChangeOutcome.Indeterminate, beforeWarning, false, "baseline state was not comparable.");
+    }
+
+    private sealed record ChangeAssessment(RepairChangeOutcome Overall, RepairChangeOutcome Dism, RepairChangeOutcome Sfc, string Evidence);
+    private sealed record CheckChange(RepairChangeOutcome Outcome, bool BaselineProblem, bool NewProblem, string Evidence);
 }

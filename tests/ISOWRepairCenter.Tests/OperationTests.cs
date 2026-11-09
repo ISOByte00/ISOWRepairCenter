@@ -315,6 +315,52 @@ public sealed class OperationTests
     }
 
     [TestMethod]
+    public async Task Change_analysis_proves_dism_improvement_without_crediting_an_unchanged_healthy_sfc_check()
+    {
+        var store = CreateStore();
+        var repair = OperationCatalog.Create().Single(x => x.Id == "system-file-repair");
+        var baseline = await new PreRepairBaselineCapture(new ScenarioRunner("The component store is repairable.", "Windows Resource Protection did not find any integrity violations."), store).CaptureAsync(repair, 1, _ => { }, CancellationToken.None);
+        var verification = await new PostRepairVerifier(new ScenarioRunner("No component store corruption detected.", "Windows Resource Protection did not find any integrity violations."), store).VerifyAsync(repair, 2, _ => { }, CancellationToken.None);
+
+        var assessed = RepairChangeAnalyzer.Apply(baseline, verification);
+
+        Assert.AreEqual(RepairChangeOutcome.Improved, assessed.ChangeOutcome);
+        Assert.AreEqual(RepairChangeOutcome.Improved, assessed.DismChangeOutcome);
+        Assert.AreEqual(RepairChangeOutcome.NotMeasured, assessed.SfcChangeOutcome);
+        StringAssert.Contains(assessed.ChangeEvidence, "DISM");
+    }
+
+    [TestMethod]
+    public async Task Change_analysis_refuses_improved_when_a_new_problem_appears()
+    {
+        var store = CreateStore();
+        var repair = OperationCatalog.Create().Single(x => x.Id == "system-file-repair");
+        var baseline = await new PreRepairBaselineCapture(new ScenarioRunner("The component store is repairable.", "Windows Resource Protection did not find any integrity violations."), store).CaptureAsync(repair, 1, _ => { }, CancellationToken.None);
+        var verification = await new PostRepairVerifier(new ScenarioRunner("No component store corruption detected.", "Windows Resource Protection found integrity violations."), store).VerifyAsync(repair, 2, _ => { }, CancellationToken.None);
+
+        var assessed = RepairChangeAnalyzer.Apply(baseline, verification);
+
+        Assert.AreEqual(RepairChangeOutcome.Indeterminate, assessed.ChangeOutcome);
+        Assert.AreEqual(RepairChangeOutcome.Improved, assessed.DismChangeOutcome);
+        Assert.AreEqual(RepairChangeOutcome.Indeterminate, assessed.SfcChangeOutcome);
+    }
+
+    [TestMethod]
+    public async Task Change_analysis_does_not_call_healthy_baseline_an_improvement()
+    {
+        var store = CreateStore();
+        var repair = OperationCatalog.Create().Single(x => x.Id == "system-file-repair");
+        var baseline = await new PreRepairBaselineCapture(new ScenarioRunner("No component store corruption detected.", "Windows Resource Protection did not find any integrity violations."), store).CaptureAsync(repair, 1, _ => { }, CancellationToken.None);
+        var verification = await new PostRepairVerifier(new ScenarioRunner("No component store corruption detected.", "Windows Resource Protection did not find any integrity violations."), store).VerifyAsync(repair, 2, _ => { }, CancellationToken.None);
+
+        var assessed = RepairChangeAnalyzer.Apply(baseline, verification);
+
+        Assert.AreEqual(RepairChangeOutcome.Indeterminate, assessed.ChangeOutcome);
+        Assert.AreEqual(RepairChangeOutcome.NotMeasured, assessed.DismChangeOutcome);
+        Assert.AreEqual(RepairChangeOutcome.NotMeasured, assessed.SfcChangeOutcome);
+    }
+
+    [TestMethod]
     public async Task Session_store_records_verification_result_and_baseline_state()
     {
         var store = CreateStore();
@@ -323,6 +369,21 @@ public sealed class OperationTests
 
         Assert.IsTrue(File.Exists(Path.Combine(store.SessionDirectory, "verifications.json")));
         StringAssert.Contains(File.ReadAllText(Path.Combine(store.SessionDirectory, "report.txt")), "Pre-repair baseline: not captured");
+    }
+
+    [TestMethod]
+    public async Task Session_store_keeps_change_assessment_consistent_in_json_and_text_reports()
+    {
+        var store = CreateStore();
+        var verification = new RepairVerificationResult("system-file-repair", "Repair system image and files", VerificationOutcome.Verified, DateTimeOffset.Now, DateTimeOffset.Now, Array.Empty<OperationResult>(), Array.Empty<DiagnosticFinding>(), "Healthy checks.", true, RepairChangeOutcome.Improved, RepairChangeOutcome.Improved, RepairChangeOutcome.NotMeasured, "DISM improved; SFC was healthy before and after.");
+        await store.SaveAsync(Array.Empty<OperationResult>(), verifications: new[] { verification });
+
+        var json = File.ReadAllText(Path.Combine(store.SessionDirectory, "verifications.json"));
+        var text = File.ReadAllText(Path.Combine(store.SessionDirectory, "report.txt"));
+        StringAssert.Contains(json, "DismChangeOutcome");
+        StringAssert.Contains(json, "SfcChangeOutcome");
+        StringAssert.Contains(text, "DISM change: Improved");
+        StringAssert.Contains(text, "SFC change: NotMeasured");
     }
 
     [TestMethod]
@@ -458,6 +519,15 @@ public sealed class OperationTests
             var output = step.FileName.Equals("sfc.exe", StringComparison.OrdinalIgnoreCase) ? sfcOutput : "No component store corruption detected.";
             File.WriteAllText(outputFile, output);
             return Task.FromResult(new StepResult(step.FileName, step.Preview, 0, TimeSpan.Zero, OperationOutcome.Succeeded, outputFile, null, "Fake result."));
+        }
+    }
+
+    private sealed class ScenarioRunner(string dismOutput, string sfcOutput, OperationOutcome outcome = OperationOutcome.Succeeded) : IProcessRunner
+    {
+        public Task<StepResult> RunAsync(CommandStep step, string outputFile, Action<string> onOutput, CancellationToken cancellationToken)
+        {
+            File.WriteAllText(outputFile, step.FileName.Equals("sfc.exe", StringComparison.OrdinalIgnoreCase) ? sfcOutput : dismOutput);
+            return Task.FromResult(new StepResult(step.FileName, step.Preview, outcome == OperationOutcome.Succeeded ? 0 : 1, TimeSpan.Zero, outcome, outputFile, null, "Scenario result."));
         }
     }
 

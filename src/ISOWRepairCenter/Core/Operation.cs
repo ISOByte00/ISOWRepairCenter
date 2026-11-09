@@ -2,8 +2,9 @@ namespace ISOWRepairCenter.Core;
 
 public enum OperationCategory { Diagnostic, SafeRepair, ExpertRepair }
 public enum OperationOutcome { Succeeded, Failed, Cancelled, VerificationFailed, Skipped }
+public enum CancellationStrategy { Immediate, CompleteBeforeCancellation }
 
-public sealed record CommandStep(string FileName, IReadOnlyList<string> Arguments, string? DisplayName = null, string? StandardInput = null)
+public sealed record CommandStep(string FileName, IReadOnlyList<string> Arguments, string? DisplayName = null, string? StandardInput = null, CancellationStrategy CancellationStrategy = CancellationStrategy.Immediate)
 {
     public string Preview => $"{FileName} {string.Join(" ", Arguments.Select(Quote))}";
     private static string Quote(string value) => value.Contains(' ') ? $"\"{value}\"" : value;

@@ -16,6 +16,7 @@ public sealed class MainViewModel : ObservableObject
     private readonly DispatcherTimer _logTimer;
     private const int MaxLiveLogCharacters = 200_000;
     private CancellationTokenSource? _cancellation;
+    private TaskCompletionSource? _runCompletion;
     private string _status = string.Empty;
     private string _liveLog = string.Empty;
     private string _dismSource = string.Empty;
@@ -59,6 +60,7 @@ public sealed class MainViewModel : ObservableObject
     public Task RunSafeRepairsAsync() => RunSelectedAsync(SafeRepairs);
     public Task RunExpertRepairsAsync() => RunSelectedAsync(ExpertRepairs);
     public void Cancel() => _cancellation?.Cancel();
+    public Task WaitForIdleAsync() => _runCompletion?.Task ?? Task.CompletedTask;
     public void OpenSessionFolder()
     {
         if (!string.IsNullOrWhiteSpace(_store.SessionDirectory) && Directory.Exists(_store.SessionDirectory)) Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_store.SessionDirectory}\"") { UseShellExecute=true });
@@ -75,6 +77,8 @@ public sealed class MainViewModel : ObservableObject
         if (!Confirm(selected, isExpert)) return;
 
         IsRunning=true; LiveLog=string.Empty; _cancellation=new CancellationTokenSource();
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _runCompletion=completion;
         var executor = new RepairExecutor(_runner, _store); var restorePoints = new RestorePointService(_runner); var results=new List<OperationResult>();
         var stoppedBeforeExecution = false;
         try
@@ -117,6 +121,8 @@ public sealed class MainViewModel : ObservableObject
                 FlushLog();
                 Status=stoppedBeforeExecution || results.Any(x => x.Cancelled) ? L["Cancelled"] : results.Count > 0 && results.All(x => x.Succeeded) ? L["Completed"] : L["CompletedWarnings"];
                 IsRunning=false; _cancellation?.Dispose(); _cancellation=null;
+                completion.TrySetResult();
+                if (ReferenceEquals(_runCompletion, completion)) _runCompletion=null;
             }
         }
     }

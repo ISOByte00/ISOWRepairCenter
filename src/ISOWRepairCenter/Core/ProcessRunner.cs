@@ -38,6 +38,13 @@ public sealed class ProcessRunner : IProcessRunner
             try { await process.WaitForExitAsync(cancellationToken); }
             catch (OperationCanceledException)
             {
+                if (step.CancellationStrategy == CancellationStrategy.CompleteBeforeCancellation)
+                {
+                    onOutput("Cancellation requested. Waiting for the operation's cleanup to finish safely.");
+                    await process.WaitForExitAsync(CancellationToken.None);
+                    var error = process.ExitCode == 0 ? "Cancelled after cleanup completed." : $"Cancelled after cleanup; exit code {process.ExitCode}.";
+                    return new StepResult(step.DisplayName ?? step.FileName, step.Preview, process.ExitCode, DateTimeOffset.Now-started, OperationOutcome.Cancelled, outputFile, error, "Cancellation was delayed so the command could run its cleanup before it exited.");
+                }
                 if (!process.HasExited) process.Kill(entireProcessTree: true);
                 await process.WaitForExitAsync();
                 return new StepResult(step.DisplayName ?? step.FileName, step.Preview, null, DateTimeOffset.Now-started, OperationOutcome.Cancelled, outputFile, "Cancelled by user.", "Process tree was terminated before completion.");

@@ -28,15 +28,14 @@ public static class OperationCatalog
         new RepairOperation { Id="system-file-repair", Title="Repair system image and files", Category=OperationCategory.SafeRepair, Description="Uses Windows Update as the default DISM source, then runs SFC /scannow.", Risk="Changes Windows component-store and protected system files. A restart may be required.", BuildSteps=i => string.IsNullOrWhiteSpace(i.DismSource) ? new[] { Cmd("DISM.exe", "/Online", "/Cleanup-Image", "/RestoreHealth"), Cmd("sfc.exe", "/scannow") } : new[] { Cmd("DISM.exe", "/Online", "/Cleanup-Image", "/RestoreHealth", $"/Source:{i.DismSource}", "/LimitAccess"), Cmd("sfc.exe", "/scannow") } },
         new RepairOperation { Id="network-reset", Title="Reset network stack", Category=OperationCategory.SafeRepair, Description="Resets Winsock, TCP/IP, DNS cache, and WinHTTP proxy settings.", RequiresRestart=true, Risk="Removes custom proxy and network-stack settings; restart is required.", BuildSteps=_ => new[] { Cmd("netsh.exe", "winsock", "reset"), Cmd("netsh.exe", "int", "ip", "reset"), Cmd("ipconfig.exe", "/flushdns"), Cmd("netsh.exe", "winhttp", "reset", "proxy") } },
         new RepairOperation { Id="component-cleanup", Title="Component store cleanup", Category=OperationCategory.SafeRepair, Description="Cleans superseded component-store files.", Risk="Removes superseded update components; do not interrupt the operation.", BuildSteps=_ => new[] { Cmd("DISM.exe", "/Online", "/Cleanup-Image", "/StartComponentCleanup") } },
-        new RepairOperation { Id="update-reset", Title="Reset Windows Update components", Category=OperationCategory.ExpertRepair, RequiresRestorePoint=true, RequiresRestart=true, Description="Safely stops update services, preserves old caches, and restores services that were running before the operation.", Risk="Update downloads are cleared and a restart is required.", BuildSteps=_ => new[] { Ps(UpdateResetScript) } },
-        new RepairOperation { Id="chkdsk-fix", Title="Schedule CHKDSK repair", Category=OperationCategory.ExpertRepair, RequiresRestorePoint=true, RequiresRestart=true, Description="Schedules CHKDSK /f on the system volume and confirms that BootExecute contains an Autochk entry.", Risk="Repairs file-system metadata during restart. Save work and allow Windows to finish the check.", BuildSteps=_ => new[] { new CommandStep("chkdsk.exe", new[] { "%SystemDrive%", "/f" }, "Schedule CHKDSK repair", "Y"), Ps("$boot=(Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager' -Name BootExecute).BootExecute -join ' '; if($boot -match 'autochk'){Write-Output 'Autochk boot entry is present.'}else{Write-Error 'Autochk boot entry was not found.'; exit 1}") } },
+        new RepairOperation { Id="update-reset", Title="Reset Windows Update components", Category=OperationCategory.ExpertRepair, RequiresRestorePoint=true, RequiresRestart=true, Description="Safely stops update services, preserves old caches, and restores services that were running before the operation.", Risk="Update downloads are cleared and a restart is required. Cancellation waits for service cleanup to finish.", BuildSteps=_ => new[] { Ps(UpdateResetScript, CancellationStrategy.CompleteBeforeCancellation) } },
         new RepairOperation { Id="bcd-backup", Title="Back up and validate BCD", Category=OperationCategory.ExpertRepair, RequiresRestorePoint=true, CreatesBcdBackup=true, Description="Exports the current BCD store before validating its entries.", Risk="Creates a rollback artifact but does not alter the active boot configuration.", BuildSteps=_ => new[] { Cmd("bcdedit.exe", "/enum", "all") } },
         // BCDBoot is deliberately unavailable until the guarded EFI wizard is implemented.
     };
 
     private static RepairOperation Diagnostic(string id, string title, string description, params CommandStep[] steps) => new() { Id=id, Title=title, Description=description, Category=OperationCategory.Diagnostic, BuildSteps=_ => steps };
     private static CommandStep Cmd(string file, params string[] args) => new(file, args);
-    private static CommandStep Ps(string script) => Cmd("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script);
+    private static CommandStep Ps(string script, CancellationStrategy cancellationStrategy = CancellationStrategy.Immediate) => new("powershell.exe", new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script }, CancellationStrategy: cancellationStrategy);
     private const string UpdateResetScript = """
         $ErrorActionPreference='Stop'
         $names='wuauserv','bits','cryptsvc'
@@ -55,7 +54,16 @@ public static class OperationCatalog
           Rename-Cache (Join-Path $env:windir 'System32\\catroot2') 'catroot2'
         }
         finally {
-          foreach($name in $names){if($wasRunning[$name]){Start-Service -Name $name -ErrorAction Continue}}
+          $restartErrors=@()
+          foreach($name in $names){
+            if(!$wasRunning[$name]){continue}
+            try {
+              Start-Service -Name $name -ErrorAction Stop
+              if((Get-Service -Name $name -ErrorAction Stop).Status -ne 'Running'){throw "Service $name did not reach the Running state."}
+            }
+            catch {$restartErrors += $_.Exception.Message}
+          }
+          if($restartErrors.Count -gt 0){throw "Windows Update service recovery failed: $($restartErrors -join '; ')"}
         }
         """;
 }

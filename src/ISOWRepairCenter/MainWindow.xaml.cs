@@ -5,6 +5,8 @@ namespace ISOWRepairCenter;
 
 public partial class MainWindow : Window
 {
+    private bool _closingAfterOperation;
+    private bool _waitingForSafeClose;
     private MainViewModel ViewModel => (MainViewModel)DataContext;
     public MainWindow() => InitializeComponent();
     private async void RunDiagnostics_Click(object sender, RoutedEventArgs e) => await ViewModel.RunDiagnosticsAsync();
@@ -15,8 +17,24 @@ public partial class MainWindow : Window
     private void About_Click(object sender, RoutedEventArgs e) => MessageBox.Show(ViewModel.L["AboutText"], ViewModel.L["About"], MessageBoxButton.OK, MessageBoxImage.Information);
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
-        if (ViewModel.IsRunning && MessageBox.Show(ViewModel.L["CloseRunning"], ViewModel.L["WindowTitle"], MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) { e.Cancel=true; return; }
-        if (ViewModel.IsRunning) ViewModel.Cancel();
+        if (_closingAfterOperation) { base.OnClosing(e); return; }
+        if (!ViewModel.IsRunning) { base.OnClosing(e); return; }
+
+        e.Cancel=true;
+        if (_waitingForSafeClose) { base.OnClosing(e); return; }
+        if (MessageBox.Show(ViewModel.L["CloseRunning"], ViewModel.L["WindowTitle"], MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+        {
+            _waitingForSafeClose=true;
+            ViewModel.Cancel();
+            _ = CloseAfterOperationAsync();
+        }
         base.OnClosing(e);
+    }
+
+    private async Task CloseAfterOperationAsync()
+    {
+        await ViewModel.WaitForIdleAsync();
+        _closingAfterOperation=true;
+        Close();
     }
 }

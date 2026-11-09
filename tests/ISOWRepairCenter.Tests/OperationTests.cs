@@ -7,12 +7,13 @@ namespace ISOWRepairCenter.Tests;
 public sealed class OperationTests
 {
     [TestMethod]
-    public void Catalog_has_guarded_expert_operations_and_no_bcdboot()
+    public void Catalog_has_guarded_expert_operations_without_unsafe_boot_or_disk_repairs()
     {
         var catalog = OperationCatalog.Create();
         Assert.IsTrue(catalog.Any(x => x.Category == OperationCategory.Diagnostic));
         Assert.IsTrue(catalog.Any(x => x.Id == "update-reset"));
         Assert.IsFalse(catalog.Any(x => x.Id == "bcdboot"));
+        Assert.IsFalse(catalog.Any(x => x.Id == "chkdsk-fix"));
     }
 
     [TestMethod]
@@ -38,6 +39,9 @@ public sealed class OperationTests
         var command = OperationCatalog.Create().Single(x => x.Id == "update-reset").BuildSteps(new OperationInputs()).Single();
         Assert.IsTrue(command.Arguments.Last().Contains("finally", StringComparison.Ordinal));
         Assert.IsTrue(command.Arguments.Last().Contains("Start-Service", StringComparison.Ordinal));
+        Assert.IsTrue(command.Arguments.Last().Contains("did not reach the Running state", StringComparison.Ordinal));
+        Assert.IsTrue(command.Arguments.Last().Contains("Windows Update service recovery failed", StringComparison.Ordinal));
+        Assert.AreEqual(CancellationStrategy.CompleteBeforeCancellation, command.CancellationStrategy);
     }
 
     [TestMethod]
@@ -47,6 +51,15 @@ public sealed class OperationTests
         var executor = new RepairExecutor(new FakeRunner(OperationOutcome.Failed), store);
         var result = await executor.ExecuteAsync(CreateOperation(), new OperationInputs(), 1, _ => { }, CancellationToken.None);
         Assert.AreEqual(OperationOutcome.Failed, result.Outcome);
+    }
+
+    [TestMethod]
+    public async Task Executor_classifies_runner_success()
+    {
+        var store = CreateStore();
+        var executor = new RepairExecutor(new FakeRunner(OperationOutcome.Succeeded), store);
+        var result = await executor.ExecuteAsync(CreateOperation(), new OperationInputs(), 1, _ => { }, CancellationToken.None);
+        Assert.AreEqual(OperationOutcome.Succeeded, result.Outcome);
     }
 
     [TestMethod]

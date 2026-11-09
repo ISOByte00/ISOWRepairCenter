@@ -7,6 +7,7 @@
 - Added structured operation outcomes and live output-file streaming.
 - Hardened Windows Update reset cleanup and made event filtering language-independent.
 - Removed BCDBoot from the general expert-operation list pending a guarded EFI wizard.
+- Removed the unverifiable CHKDSK scheduling card; cancellation now waits for Windows Update cleanup to finish safely.
 
 ## 0.3.0
 

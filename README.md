@@ -22,7 +22,7 @@ Run `Publish-Portable.ps1` from PowerShell to produce a self-contained, single-f
 
 - Diagnostics: disk and NTFS status, event logs, DISM/SFC checks, Windows Update state, network state, BCD inspection, and SrtTrail collection.
 - Safe repairs: DISM plus SFC, network-stack reset, and component-store cleanup.
-- Expert repairs: guarded Windows Update reset, scheduled CHKDSK repair, and BCD backup/validation. BCDBoot is unavailable until its separate EFI validation wizard is implemented.
+- Expert repairs: guarded Windows Update reset and BCD backup/validation. CHKDSK and BCDBoot are unavailable until their separate validated wizards are implemented.
 
 Expert repairs require a second acknowledgement. The tool tries to create a restore point first, and it creates a BCD export before BCD-related work. If a restore point is unavailable, the user must explicitly decide whether to continue.
 

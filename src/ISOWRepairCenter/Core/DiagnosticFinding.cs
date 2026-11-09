@@ -18,13 +18,15 @@ public sealed record DiagnosticFinding(
 public static class DiagnosticAnalyzer
 {
     public static IReadOnlyList<DiagnosticFinding> Analyze(IReadOnlyList<OperationResult> results) => results
-        .Where(IsSupported)
+        .Where(x => IsSupported(x) && !IsEventLog(x))
         .SelectMany(AnalyzeResult)
+        .Concat(AnalyzeEventLogs(results.Where(IsEventLog).ToArray()))
         .OrderBy(SortOrder)
         .ThenBy(x => x.OperationTitle, StringComparer.OrdinalIgnoreCase)
         .ToArray();
 
-    private static bool IsSupported(OperationResult result) => result.Id is "dirty-bit" or "dism-health" or "sfc-verify" or "physical-disks" or "update-status" or "network-status";
+    private static bool IsSupported(OperationResult result) => result.Id is "dirty-bit" or "dism-health" or "sfc-verify" or "physical-disks" or "update-status" or "network-status" or "storage-events" or "critical-events";
+    private static bool IsEventLog(OperationResult result) => result.Id is "storage-events" or "critical-events";
 
     private static IEnumerable<DiagnosticFinding> AnalyzeResult(OperationResult result)
     {
@@ -101,6 +103,84 @@ public static class DiagnosticAnalyzer
         }
         catch (JsonException) { return new[] { Unknown(result, "disk-health-unknown", "Physical-disk output was not valid structured data.") }; }
     }
+
+    private static IEnumerable<DiagnosticFinding> AnalyzeEventLogs(IReadOnlyList<OperationResult> results)
+    {
+        var events = new List<EventRecord>();
+        var hasUnreadableOutput = false;
+        foreach (var result in results)
+        {
+            if (result.Cancelled || !result.Succeeded)
+            {
+                foreach (var finding in AnalyzeResult(result)) yield return finding;
+                continue;
+            }
+
+            var outputs = result.Steps.Select(ReadOutput).ToArray();
+            if (outputs.Any(string.IsNullOrWhiteSpace) || !TryReadEvents(string.Join('\n', outputs), out var parsed))
+            {
+                hasUnreadableOutput = true;
+                yield return Unknown(result, "event-log-status-unknown", "Event log output was missing or did not match the structured event schema.");
+                continue;
+            }
+            events.AddRange(parsed);
+        }
+
+        var distinctEvents = events.DistinctBy(x => (x.ProviderName, x.Id, x.TimeCreated, x.Message)).ToArray();
+        if (distinctEvents.Length == 0)
+        {
+            if (results.Any(x => x.Succeeded) && !hasUnreadableOutput) yield return CreateEventFinding("event-log-no-matching-patterns", FindingSeverity.Information, FindingConfidence.Known, "No supported storage or file-system warning patterns were found in the selected event logs.", "The structured event log collection was empty.", "This does not replace regular backups or hardware monitoring.");
+            yield break;
+        }
+
+        var nvmeResets = distinctEvents.Where(x => x.ProviderName.Equals("stornvme", StringComparison.OrdinalIgnoreCase) && x.Id == 129).OrderBy(x => x.TimeCreated).ToArray();
+        var ntfsIntegrity = distinctEvents.Where(x => x.ProviderName.Equals("ntfs", StringComparison.OrdinalIgnoreCase) && x.Id is 55 or 57).OrderBy(x => x.TimeCreated).ToArray();
+        var diskRetries = distinctEvents.Where(x => x.ProviderName.Equals("disk", StringComparison.OrdinalIgnoreCase) && x.Id == 153).OrderBy(x => x.TimeCreated).ToArray();
+
+        if (nvmeResets.Length > 0)
+        {
+            var recurring = IsRecurring(nvmeResets);
+            yield return CreateEventFinding("nvme-reset-events", recurring ? FindingSeverity.Warning : FindingSeverity.Information, FindingConfidence.ManualReviewRequired,
+                recurring ? "Repeated NVMe controller reset events were recorded." : "An NVMe controller reset event was recorded.",
+                DescribeEvents(nvmeResets), "Review recent storage-driver, firmware, power-management, and hardware changes. Keep current backups; this event alone does not prove drive failure.");
+        }
+        if (ntfsIntegrity.Length > 0)
+            yield return CreateEventFinding("ntfs-integrity-events", FindingSeverity.Warning, FindingConfidence.ManualReviewRequired, "NTFS integrity-related events were recorded.", DescribeEvents(ntfsIntegrity), "Back up important files, review the event details, and run the read-only NTFS scan before scheduling any repair. Historical events do not prove current corruption.");
+        if (diskRetries.Length > 0)
+            yield return CreateEventFinding("disk-retry-events", FindingSeverity.Warning, FindingConfidence.ManualReviewRequired, "Disk I/O retry events were recorded.", DescribeEvents(diskRetries), "Review storage connections, drivers, firmware, and disk health. Keep backups current; this event does not identify a root cause by itself.");
+        if (nvmeResets.Length > 0 && ntfsIntegrity.Length > 0 && HasTemporalOverlap(nvmeResets, ntfsIntegrity))
+            yield return CreateEventFinding("storage-event-temporal-overlap", FindingSeverity.Warning, FindingConfidence.ManualReviewRequired, "NVMe reset and NTFS integrity events occurred close together in time.", "At least one stornvme Event ID 129 and one Ntfs Event ID 55 or 57 were within 10 minutes.", "Review the timestamps and full event messages together. Temporal proximity can guide investigation but does not establish causation.");
+        if (nvmeResets.Length == 0 && ntfsIntegrity.Length == 0 && diskRetries.Length == 0)
+            yield return CreateEventFinding("event-log-no-matching-patterns", FindingSeverity.Information, FindingConfidence.Known, "No supported storage or file-system warning patterns were found in the selected event logs.", $"{distinctEvents.Length} structured events were collected, but none matched the current conservative rules.", "Review raw event output if you are investigating a specific issue.");
+    }
+
+    private static bool TryReadEvents(string output, out IReadOnlyList<EventRecord> events)
+    {
+        events = Array.Empty<EventRecord>();
+        try
+        {
+            using var document = JsonDocument.Parse(output);
+            if (!document.RootElement.TryGetProperty("Events", out var entries) || entries.ValueKind != JsonValueKind.Array) return false;
+            var parsed = new List<EventRecord>();
+            foreach (var entry in entries.EnumerateArray())
+            {
+                var provider = ReadJsonString(entry, "ProviderName");
+                var message = ReadJsonString(entry, "Message") ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(provider) || !entry.TryGetProperty("Id", out var idValue) || !idValue.TryGetInt32(out var id) || !DateTimeOffset.TryParse(ReadJsonString(entry, "TimeCreated"), out var timeCreated)) return false;
+                parsed.Add(new EventRecord(provider, id, timeCreated, message));
+            }
+            events = parsed;
+            return true;
+        }
+        catch (JsonException) { return false; }
+        catch (InvalidOperationException) { return false; }
+    }
+
+    private static bool IsRecurring(IReadOnlyList<EventRecord> events) => events.Count >= 3 && events[^1].TimeCreated - events[0].TimeCreated <= TimeSpan.FromMinutes(10);
+    private static bool HasTemporalOverlap(IReadOnlyList<EventRecord> first, IReadOnlyList<EventRecord> second) => first.Any(x => second.Any(y => (x.TimeCreated - y.TimeCreated).Duration() <= TimeSpan.FromMinutes(10)));
+    private static string DescribeEvents(IReadOnlyList<EventRecord> events) => $"{events.Count} event(s): {string.Join(", ", events.Take(3).Select(x => $"{x.ProviderName} {x.Id} at {x.TimeCreated:yyyy-MM-dd HH:mm:ss zzz}"))}{(events.Count > 3 ? " …" : string.Empty)}";
+    private static DiagnosticFinding CreateEventFinding(string code, FindingSeverity severity, FindingConfidence confidence, string summary, string evidence, string recommendation) => new(code, severity, confidence, "event-log-analysis", "Event log analysis", summary, evidence, recommendation);
+    private sealed record EventRecord(string ProviderName, int Id, DateTimeOffset TimeCreated, string Message);
 
     private static bool IsDismHealthy(string output) => output.Contains("No component store corruption detected", StringComparison.OrdinalIgnoreCase);
     private static bool NeedsDismRepair(string output) => output.Contains("component store is repairable", StringComparison.OrdinalIgnoreCase) || (output.Contains("component store corruption", StringComparison.OrdinalIgnoreCase) && !IsDismHealthy(output));

@@ -41,11 +41,17 @@ public sealed class DiagnosticFindingViewModel : ObservableObject
         ["system-files-status-unknown"] = new("SFC sağlık sonucu otomatik belirlenemedi.", "SFC çıktısı desteklenen bir dilde tanınmadı.", "Onarım kararı vermeden önce SFC çıktısını manuel inceleyin."),
         ["disk-health-unknown"] = new("Disk sağlık sonucu otomatik belirlenemedi.", "Fiziksel disk verisi eksik veya yapılandırılmış biçimde değil.", "Disk durumunu manuel inceleyin ve önemli verileri yedekleyin."),
         ["disk-health-critical"] = new("Bir fiziksel disk sağlıksız veya çalışmaz durumda.", "Get-PhysicalDisk, Unhealthy veya OK olmayan çalışma durumu bildirdi.", "Verileri hemen yedekleyin ve üreticinin disk tanı aracını çalıştırın.")
+        , ["event-log-status-unknown"] = new("Olay günlüğü çıktısı otomatik analiz için kullanılamadı.", "Olay günlüğü çıktısı eksik veya beklenen yapılandırılmış şemada değil.", "Onarım kararı vermeden önce kaydedilmiş çıktıyı manuel inceleyin.")
+        , ["event-log-no-matching-patterns"] = new("Seçili olay günlüklerinde desteklenen depolama veya dosya sistemi uyarısı bulunmadı.", "Yapılandırılmış olaylar mevcut kurallarla eşleşmedi.", "Bu sonuç düzenli yedekleme veya donanım izlemenin yerine geçmez.")
+        , ["nvme-reset-events"] = new("NVMe denetleyici sıfırlama olayı kaydedildi.", "stornvme Event ID 129 olayları bulundu.", "Depolama sürücüsü, ürün yazılımı ve güç yönetimi değişikliklerini inceleyin. Bu olay tek başına disk arızasını kanıtlamaz.")
+        , ["ntfs-integrity-events"] = new("NTFS bütünlüğüyle ilişkili olaylar kaydedildi.", "Ntfs Event ID 55 veya 57 olayları bulundu.", "Önemli dosyaları yedekleyin, olay ayrıntılarını inceleyin ve onarım planlamadan önce salt-okunur NTFS taramasını çalıştırın.")
+        , ["disk-retry-events"] = new("Disk G/Ç yeniden deneme olayları kaydedildi.", "Disk Event ID 153 olayları bulundu.", "Depolama bağlantılarını, sürücüleri, ürün yazılımını ve disk sağlığını inceleyin. Bu olay tek başına kök nedeni göstermez.")
+        , ["storage-event-temporal-overlap"] = new("NVMe sıfırlama ve NTFS olayları zaman olarak birbirine yakın gerçekleşti.", "stornvme 129 ile Ntfs 55 veya 57 olaylarından en az biri 10 dakika içinde gerçekleşti.", "Zaman damgalarını ve tam olay iletilerini birlikte inceleyin. Zaman yakınlığı nedensellik kanıtı değildir.")
     };
 
     private static readonly Dictionary<string, string> TurkishOperationTitles = new()
     {
-        ["dirty-bit"] = "Dosya sistemi dirty bit durumu", ["dism-health"] = "Bileşen deposu sağlığı", ["sfc-verify"] = "Sistem dosyası doğrulaması", ["physical-disks"] = "Fiziksel disk sağlığı", ["update-status"] = "Windows Update durumu", ["network-status"] = "Ağ durumu"
+        ["dirty-bit"] = "Dosya sistemi dirty bit durumu", ["dism-health"] = "Bileşen deposu sağlığı", ["sfc-verify"] = "Sistem dosyası doğrulaması", ["physical-disks"] = "Fiziksel disk sağlığı", ["update-status"] = "Windows Update durumu", ["network-status"] = "Ağ durumu", ["event-log-analysis"] = "Olay günlüğü analizi"
     };
 
     private sealed record Translation(string Summary, string Evidence, string Recommendation);

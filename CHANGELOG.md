@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Began v0.6 structured Event Log analysis: storage and critical System events now use a locale-independent JSON schema, with conservative NVMe reset, NTFS integrity, disk retry, de-duplication, and temporal-overlap findings.
+- Added an instant Diagnostics search box without changing selections or run behavior.
+
 ## 0.5.0
 
 - Added structured diagnostic findings with severity, evidence, and recommended next actions.

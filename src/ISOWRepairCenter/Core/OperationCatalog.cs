@@ -16,9 +16,9 @@ public static class OperationCatalog
             Cmd("DISM.exe", "/Online", "/Cleanup-Image", "/CheckHealth", "/English"), Cmd("DISM.exe", "/Online", "/Cleanup-Image", "/ScanHealth", "/English")),
         Diagnostic("sfc-verify", "System file verification", "Runs SFC verification without repairing system files.", new CommandStep("sfc.exe", new[] { "/verifyonly" }, OutputEncoding: CommandOutputEncoding.Utf16Le)),
         Diagnostic("storage-events", "Storage and NTFS events", "Collects recent disk, NTFS, storage, and volume-manager System events.",
-            Ps("Get-WinEvent -FilterHashtable @{LogName='System';StartTime=(Get-Date).AddDays(-14)} -ErrorAction SilentlyContinue | Where-Object {$_.ProviderName -match 'disk|ntfs|stor|volmgr|stornvme|iastor'} | Select-Object -First 100 TimeCreated,Id,ProviderName,LevelDisplayName,Message | Format-List")),
+            Ps(EventLogScript("$_.ProviderName -match 'disk|ntfs|stor|volmgr|stornvme|iastor'"))),
         Diagnostic("critical-events", "Critical system events", "Collects recent critical and error events from the System log.",
-            Ps("Get-WinEvent -FilterHashtable @{LogName='System';StartTime=(Get-Date).AddDays(-14)} -ErrorAction SilentlyContinue | Where-Object {$_.Level -in 1,2} | Select-Object -First 100 TimeCreated,Id,ProviderName,LevelDisplayName,Message | Format-List")),
+            Ps(EventLogScript("$_.Level -in 1,2"))),
         Diagnostic("update-status", "Windows Update status", "Checks Windows Update service state and recent client events.",
             Ps("Get-Service wuauserv,bits,cryptsvc | Format-Table Name,Status,StartType -AutoSize; Get-WinEvent -LogName 'Microsoft-Windows-WindowsUpdateClient/Operational' -MaxEvents 50 -ErrorAction SilentlyContinue | Select-Object TimeCreated,Id,LevelDisplayName,Message | Format-List")),
         Diagnostic("network-status", "Network status", "Captures adapters, IP configuration, DNS configuration, and proxy state.",
@@ -36,6 +36,15 @@ public static class OperationCatalog
     private static RepairOperation Diagnostic(string id, string title, string description, params CommandStep[] steps) => new() { Id=id, Title=title, Description=description, Category=OperationCategory.Diagnostic, BuildSteps=_ => steps };
     private static CommandStep Cmd(string file, params string[] args) => new(file, args);
     private static CommandStep Ps(string script, CancellationStrategy cancellationStrategy = CancellationStrategy.Immediate) => new("powershell.exe", new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script }, CancellationStrategy: cancellationStrategy);
+    private static string EventLogScript(string filter) => $$"""
+        $start=(Get-Date).AddDays(-14)
+        $events=@(Get-WinEvent -FilterHashtable @{LogName='System';StartTime=$start} -ErrorAction SilentlyContinue |
+          Where-Object { {{filter}} } |
+          Sort-Object TimeCreated -Descending |
+          Select-Object -First 100 |
+          ForEach-Object { [PSCustomObject]@{ TimeCreated=$_.TimeCreated.ToString('o'); Id=[int]$_.Id; ProviderName=[string]$_.ProviderName; Level=[int]$_.Level; Message=[string]$_.Message } })
+        [PSCustomObject]@{ SchemaVersion=1; WindowStart=$start.ToString('o'); Events=$events } | ConvertTo-Json -Compress
+        """;
     private const string UpdateResetScript = """
         $ErrorActionPreference='Stop'
         $names='wuauserv','bits','cryptsvc'

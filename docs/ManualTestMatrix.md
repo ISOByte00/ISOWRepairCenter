@@ -9,6 +9,7 @@ This matrix records behavior that unit tests cannot prove. Do not include person
 | SFC verification output | Pending | Verified | UTF-16LE output is decoded and a known finding is produced when the result is recognized. |
 | Physical disk JSON health | Pending | Verified | Healthy/OK data is known; incomplete or malformed data is unknown. |
 | Cancelled diagnostic | Pending | Verified | Classified as Unknown, not as a system fault. |
+| Structured Event Log analysis | Pending | Pending | Recognized storage patterns are reported for manual review; malformed data is Unknown and no temporal overlap is treated as causation. |
 | Failed diagnostic | Pending | Pending | Classified as Warning with ManualReviewRequired. |
 | Update reset cancellation | Pending | Pending | Cleanup completes before the process exits and the window closes. |
 | BCD backup failure | Pending | Pending | Operation fails safely and records the backup failure. |

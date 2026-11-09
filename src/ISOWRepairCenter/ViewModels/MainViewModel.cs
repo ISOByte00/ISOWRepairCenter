@@ -1,7 +1,9 @@
 using System.Collections.ObjectModel;
 using System.Collections.Concurrent;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Windows;
+using System.Windows.Data;
 using System.Windows.Threading;
 using ISOWRepairCenter.Core;
 using ISOWRepairCenter.Localization;
@@ -25,8 +27,10 @@ public sealed class MainViewModel : ObservableObject
     private bool _isRunning;
     private string _lastSession = string.Empty;
     private string _selectedLanguage = "tr";
+    private string _diagnosticSearchText = string.Empty;
 
     public ObservableCollection<OperationViewModel> Diagnostics { get; }
+    public ICollectionView FilteredDiagnostics { get; }
     public ObservableCollection<OperationViewModel> SafeRepairs { get; }
     public ObservableCollection<OperationViewModel> ExpertRepairs { get; }
     public ObservableCollection<DiagnosticFindingViewModel> Findings { get; } = new();
@@ -38,6 +42,14 @@ public sealed class MainViewModel : ObservableObject
     public string DismSource { get => _dismSource; set => Set(ref _dismSource, value); }
     public string WindowsSource { get => _windowsSource; set => Set(ref _windowsSource, value); }
     public string EfiTarget { get => _efiTarget; set => Set(ref _efiTarget, value); }
+    public string DiagnosticSearchText
+    {
+        get => _diagnosticSearchText;
+        set
+        {
+            if (Set(ref _diagnosticSearchText, value)) FilteredDiagnostics.Refresh();
+        }
+    }
     public bool IsRunning { get => _isRunning; private set { if(Set(ref _isRunning, value)) { OnPropertyChanged(nameof(CanStart)); OnPropertyChanged(nameof(CanCancel)); } } }
     public bool CanStart => !IsRunning;
     public bool CanCancel => IsRunning;
@@ -50,6 +62,8 @@ public sealed class MainViewModel : ObservableObject
     {
         var all = OperationCatalog.Create().Select(x => new OperationViewModel(x)).ToList();
         Diagnostics = new(all.Where(x => x.Operation.Category == OperationCategory.Diagnostic));
+        FilteredDiagnostics = CollectionViewSource.GetDefaultView(Diagnostics);
+        FilteredDiagnostics.Filter = MatchesDiagnosticSearch;
         SafeRepairs = new(all.Where(x => x.Operation.Category == OperationCategory.SafeRepair));
         ExpertRepairs = new(all.Where(x => x.Operation.Category == OperationCategory.ExpertRepair));
         _logTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(125) };
@@ -70,6 +84,16 @@ public sealed class MainViewModel : ObservableObject
     }
 
     private Task RunSelectedAsync(IEnumerable<OperationViewModel> source) => RunOperationsAsync(source.Where(x => x.IsSelected).ToList());
+
+    private bool MatchesDiagnosticSearch(object item)
+    {
+        if (item is not OperationViewModel operation || string.IsNullOrWhiteSpace(DiagnosticSearchText)) return true;
+        var query = DiagnosticSearchText.Trim();
+        return operation.Title.Contains(query, StringComparison.OrdinalIgnoreCase)
+            || operation.Description.Contains(query, StringComparison.OrdinalIgnoreCase)
+            || operation.Operation.Id.Contains(query, StringComparison.OrdinalIgnoreCase)
+            || operation.Operation.Title.Contains(query, StringComparison.OrdinalIgnoreCase);
+    }
 
     private async Task RunOperationsAsync(IReadOnlyList<OperationViewModel> selected)
     {
@@ -159,6 +183,7 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(AdministratorStatus));
         OnPropertyChanged(nameof(QuickDiagnosticsLabel));
         foreach (var item in Diagnostics.Concat(SafeRepairs).Concat(ExpertRepairs)) item.SetLanguage(language);
+        FilteredDiagnostics.Refresh();
         foreach (var finding in Findings) finding.SetLanguage(language);
     }
 }

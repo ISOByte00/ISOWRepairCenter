@@ -7,7 +7,7 @@ public static class OperationCatalog
         Diagnostic("system-overview", "System overview", "Windows version, installed updates, and logical volumes.",
             Ps("Get-ComputerInfo | Select-Object WindowsProductName,WindowsVersion,OsBuildNumber,OsArchitecture | Format-List; Get-Volume | Format-Table DriveLetter,FileSystem,HealthStatus,SizeRemaining,Size -AutoSize")),
         Diagnostic("physical-disks", "Physical disk health", "Physical disk media type, operational state, and storage health.",
-            Ps("Get-PhysicalDisk | Format-Table FriendlyName,MediaType,HealthStatus,OperationalStatus,Size -AutoSize")),
+            Ps("Get-PhysicalDisk | Select-Object FriendlyName,MediaType,HealthStatus,OperationalStatus,Size | ConvertTo-Json -Compress")),
         Diagnostic("dirty-bit", "File system dirty bit", "Checks whether the system volume is marked for file system repair.",
             Cmd("fsutil.exe", "dirty", "query", "%SystemDrive%")),
         Diagnostic("chkdsk-scan", "Online NTFS scan", "Runs the non-destructive CHKDSK online scan on the system volume.",

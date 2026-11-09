@@ -29,7 +29,7 @@ public sealed class SessionStore
         if (resolvedFindings.Count > 0)
         {
             text.AppendLine("Diagnostic findings:");
-            foreach (var finding in resolvedFindings) text.AppendLine($"  [{finding.Severity}] {finding.Summary}\n    Evidence: {finding.Evidence}\n    Recommendation: {finding.Recommendation}");
+            foreach (var finding in resolvedFindings) text.AppendLine($"  [{finding.Severity} / {finding.Confidence}] {finding.OperationTitle}: {finding.Summary}\n    Evidence: {finding.Evidence}\n    Recommendation: {finding.Recommendation}");
             text.AppendLine();
         }
         foreach (var result in results)

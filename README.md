@@ -34,6 +34,8 @@ DISM uses Windows Update by default. If Windows Update cannot provide repair fil
 
 Each session is stored in `%ProgramData%\ISOWRepairCenter\Sessions`. It contains live raw command output, `results.json`, `findings.json`, `report.txt`, and `report.html`.
 
+Diagnostic findings distinguish severity from confidence. `Known` findings have recognized evidence; `Unknown` and `ManualReviewRequired` findings must be reviewed before deciding on a repair.
+
 ## Safety limits
 
 This application cannot repair failed SSD/HDD hardware, RAM faults, firmware defects, or incorrect manual EFI partition selection. Verify backups before expert repairs and do not interrupt disk or boot work.

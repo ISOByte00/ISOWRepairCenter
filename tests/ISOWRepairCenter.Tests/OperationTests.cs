@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ISOWRepairCenter.Core;
+using ISOWRepairCenter.ViewModels;
 
 namespace ISOWRepairCenter.Tests;
 
@@ -109,18 +110,118 @@ public sealed class OperationTests
     [TestMethod]
     public void Diagnostic_analyzer_creates_actionable_findings_from_command_output()
     {
-        var root = Path.Combine(Path.GetTempPath(), "IsoWrcTest_" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        var output = Path.Combine(root, "dirty-bit.log");
-        File.WriteAllText(output, "Volume C: is NOT Dirty");
-        var result = new OperationResult("dirty-bit", "File system dirty bit", DateTimeOffset.Now, DateTimeOffset.Now, OperationOutcome.Succeeded,
-            new[] { new StepResult("fsutil", "fsutil dirty query C:", 0, TimeSpan.Zero, OperationOutcome.Succeeded, output, null, "Completed.") });
-
-        var finding = DiagnosticAnalyzer.Analyze(new[] { result }).Single();
+        var finding = Analyze("dirty-bit", OperationOutcome.Succeeded, "Volume C: is NOT Dirty").Single();
 
         Assert.AreEqual("file-system-clean", finding.Code);
         Assert.AreEqual(FindingSeverity.Information, finding.Severity);
-        Directory.Delete(root, true);
+        Assert.AreEqual(FindingConfidence.Known, finding.Confidence);
+    }
+
+    [TestMethod]
+    public void Diagnostic_analyzer_does_not_treat_empty_or_unexpected_output_as_healthy()
+    {
+        var empty = Analyze("physical-disks", OperationOutcome.Succeeded, string.Empty).Single();
+        var unexpected = Analyze("sfc-verify", OperationOutcome.Succeeded, "Unexpected localized output").Single();
+
+        Assert.AreEqual(FindingConfidence.Unknown, empty.Confidence);
+        Assert.AreEqual(FindingConfidence.Unknown, unexpected.Confidence);
+    }
+
+    [TestMethod]
+    public void Diagnostic_analyzer_keeps_failed_and_cancelled_checks_out_of_healthy_state()
+    {
+        var failed = Analyze("dirty-bit", OperationOutcome.Failed, "failure").Single();
+        var cancelled = Analyze("dirty-bit", OperationOutcome.Cancelled, "partial").Single();
+
+        Assert.AreEqual(FindingConfidence.ManualReviewRequired, failed.Confidence);
+        Assert.AreEqual(FindingSeverity.Warning, failed.Severity);
+        Assert.AreEqual(FindingConfidence.Unknown, cancelled.Confidence);
+        Assert.AreEqual(FindingSeverity.Information, cancelled.Severity);
+    }
+
+    [TestMethod]
+    public void Diagnostic_analyzer_recognizes_turkish_sfc_output()
+    {
+        var finding = Analyze("sfc-verify", OperationOutcome.Succeeded, "Windows Kaynak Koruması herhangi bir bütünlük ihlali bulamadı.").Single();
+
+        Assert.AreEqual("system-files-healthy", finding.Code);
+        Assert.AreEqual(FindingConfidence.Known, finding.Confidence);
+    }
+
+    [TestMethod]
+    public void Diagnostic_analyzer_requires_complete_structured_disk_health_data()
+    {
+        var healthy = Analyze("physical-disks", OperationOutcome.Succeeded, "[{\"HealthStatus\":\"Healthy\",\"OperationalStatus\":\"OK\"}]").Single();
+        var unhealthy = Analyze("physical-disks", OperationOutcome.Succeeded, "[{\"HealthStatus\":\"Unhealthy\",\"OperationalStatus\":\"OK\"}]").Single();
+        var incomplete = Analyze("physical-disks", OperationOutcome.Succeeded, "[{\"HealthStatus\":\"Healthy\"}]").Single();
+
+        Assert.AreEqual(FindingConfidence.Known, healthy.Confidence);
+        Assert.AreEqual(FindingSeverity.Information, healthy.Severity);
+        Assert.AreEqual(FindingSeverity.Critical, unhealthy.Severity);
+        Assert.AreEqual(FindingConfidence.Unknown, incomplete.Confidence);
+    }
+
+    [TestMethod]
+    public void Diagnostic_analyzer_requires_both_dism_health_steps()
+    {
+        var healthy = Analyze("dism-health", OperationOutcome.Succeeded, "No component store corruption detected.", "No component store corruption detected.").Single();
+        var incomplete = Analyze("dism-health", OperationOutcome.Succeeded, "No component store corruption detected.").Single();
+
+        Assert.AreEqual(FindingConfidence.Known, healthy.Confidence);
+        Assert.AreEqual(FindingConfidence.Unknown, incomplete.Confidence);
+    }
+
+    [TestMethod]
+    public void Findings_are_sorted_by_severity_then_confidence()
+    {
+        var results = new[]
+        {
+            CreateResult("sfc-verify", OperationOutcome.Succeeded, "Unexpected output"),
+            CreateResult("physical-disks", OperationOutcome.Succeeded, "[{\"HealthStatus\":\"Unhealthy\",\"OperationalStatus\":\"OK\"}]"),
+            CreateResult("dirty-bit", OperationOutcome.Succeeded, "Volume C: is Dirty")
+        };
+        var findings = DiagnosticAnalyzer.Analyze(results);
+
+        Assert.AreEqual("disk-health-critical", findings[0].Code);
+        Assert.AreEqual("file-system-dirty", findings[1].Code);
+        Assert.AreEqual(FindingConfidence.Unknown, findings[2].Confidence);
+    }
+
+    [TestMethod]
+    public void Finding_view_model_localizes_labels_without_changing_confidence()
+    {
+        var finding = new DiagnosticFinding("file-system-clean", FindingSeverity.Information, FindingConfidence.Known, "dirty-bit", "File system dirty bit", "English", "Evidence", "Recommendation");
+        var viewModel = new DiagnosticFindingViewModel(finding, "tr");
+
+        Assert.AreEqual("Bilgi", viewModel.SeverityLabel);
+        Assert.AreEqual("Doğrulandı", viewModel.ConfidenceLabel);
+        Assert.AreEqual("Dosya sistemi dirty bit durumu", viewModel.OperationTitle);
+    }
+
+    private static IReadOnlyList<DiagnosticFinding> Analyze(string id, OperationOutcome outcome, params string[] outputs)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "IsoWrcTest_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var result = CreateResult(id, outcome, outputs, root);
+            return DiagnosticAnalyzer.Analyze(new[] { result });
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    private static OperationResult CreateResult(string id, OperationOutcome outcome, string output, string? root = null) => CreateResult(id, outcome, new[] { output }, root);
+    private static OperationResult CreateResult(string id, OperationOutcome outcome, string[] outputs, string? root = null)
+    {
+        root ??= Path.Combine(Path.GetTempPath(), "IsoWrcTest_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var steps = outputs.Select((output, index) =>
+        {
+            var path = Path.Combine(root, $"{index}.log");
+            File.WriteAllText(path, output);
+            return new StepResult("test", "test", outcome == OperationOutcome.Succeeded ? 0 : 1, TimeSpan.Zero, outcome, path, null, "Test.");
+        }).ToArray();
+        return new OperationResult(id, id, DateTimeOffset.Now, DateTimeOffset.Now, outcome, steps);
     }
 
     private static SessionStore CreateStore()

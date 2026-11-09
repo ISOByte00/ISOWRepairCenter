@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Added structured diagnostic findings with severity, evidence, and recommended next actions.
+
 ## 0.4.0
 
 - Renamed solution, projects, namespaces, session storage, and publish output to ISOWRepairCenter.

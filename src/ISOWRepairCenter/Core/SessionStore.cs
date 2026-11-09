@@ -18,12 +18,20 @@ public sealed class SessionStore
 
     public string StepOutputPath(int number, string operationId) => Path.Combine(SessionDirectory, $"{number:00}_{operationId}.log");
 
-    public async Task SaveAsync(IReadOnlyList<OperationResult> results)
+    public async Task SaveAsync(IReadOnlyList<OperationResult> results, IReadOnlyList<DiagnosticFinding>? findings = null)
     {
         if (string.IsNullOrWhiteSpace(SessionDirectory)) throw new InvalidOperationException("A session must be started before saving a report.");
         var json = JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented=true });
         await File.WriteAllTextAsync(Path.Combine(SessionDirectory, "results.json"), json, Encoding.UTF8);
+        var resolvedFindings = findings ?? DiagnosticAnalyzer.Analyze(results);
+        await File.WriteAllTextAsync(Path.Combine(SessionDirectory, "findings.json"), JsonSerializer.Serialize(resolvedFindings, new JsonSerializerOptions { WriteIndented=true }), Encoding.UTF8);
         var text = new StringBuilder("ISOByte ISOWRepairCenter session\n\n");
+        if (resolvedFindings.Count > 0)
+        {
+            text.AppendLine("Diagnostic findings:");
+            foreach (var finding in resolvedFindings) text.AppendLine($"  [{finding.Severity}] {finding.Summary}\n    Evidence: {finding.Evidence}\n    Recommendation: {finding.Recommendation}");
+            text.AppendLine();
+        }
         foreach (var result in results)
         {
             text.AppendLine($"{result.Title}: {result.Outcome}");

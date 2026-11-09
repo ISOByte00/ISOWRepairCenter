@@ -78,6 +78,7 @@ public sealed class OperationTests
         var store = new SessionStore(root); store.Start();
         await store.SaveAsync(new[] { new OperationResult("test", "Test", DateTimeOffset.Now, DateTimeOffset.Now, OperationOutcome.Succeeded, Array.Empty<StepResult>()) });
         Assert.IsTrue(File.Exists(Path.Combine(store.SessionDirectory, "results.json")));
+        Assert.IsTrue(File.Exists(Path.Combine(store.SessionDirectory, "findings.json")));
         Assert.IsTrue(File.Exists(Path.Combine(store.SessionDirectory, "report.txt")));
         Assert.IsTrue(File.Exists(Path.Combine(store.SessionDirectory, "report.html")));
         Directory.Delete(root, true);
@@ -88,6 +89,23 @@ public sealed class OperationTests
     {
         var store = new SessionStore(Path.Combine(Path.GetTempPath(), "IsoWrcTest_" + Guid.NewGuid().ToString("N")));
         await Assert.ThrowsAsync<InvalidOperationException>(() => store.SaveAsync(Array.Empty<OperationResult>()));
+    }
+
+    [TestMethod]
+    public void Diagnostic_analyzer_creates_actionable_findings_from_command_output()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "IsoWrcTest_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var output = Path.Combine(root, "dirty-bit.log");
+        File.WriteAllText(output, "Volume C: is NOT Dirty");
+        var result = new OperationResult("dirty-bit", "File system dirty bit", DateTimeOffset.Now, DateTimeOffset.Now, OperationOutcome.Succeeded,
+            new[] { new StepResult("fsutil", "fsutil dirty query C:", 0, TimeSpan.Zero, OperationOutcome.Succeeded, output, null, "Completed.") });
+
+        var finding = DiagnosticAnalyzer.Analyze(new[] { result }).Single();
+
+        Assert.AreEqual("file-system-clean", finding.Code);
+        Assert.AreEqual(FindingSeverity.Information, finding.Severity);
+        Directory.Delete(root, true);
     }
 
     private static SessionStore CreateStore()

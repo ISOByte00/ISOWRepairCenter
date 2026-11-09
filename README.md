@@ -32,7 +32,7 @@ DISM uses Windows Update by default. If Windows Update cannot provide repair fil
 
 ## Reports
 
-Each session is stored in `%ProgramData%\ISOWRepairCenter\Sessions`. It contains live raw command output, `results.json`, `report.txt`, and `report.html`.
+Each session is stored in `%ProgramData%\ISOWRepairCenter\Sessions`. It contains live raw command output, `results.json`, `findings.json`, `report.txt`, and `report.html`.
 
 ## Safety limits
 

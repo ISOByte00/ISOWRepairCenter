@@ -29,6 +29,7 @@ public sealed class MainViewModel : ObservableObject
     public ObservableCollection<OperationViewModel> Diagnostics { get; }
     public ObservableCollection<OperationViewModel> SafeRepairs { get; }
     public ObservableCollection<OperationViewModel> ExpertRepairs { get; }
+    public ObservableCollection<DiagnosticFindingViewModel> Findings { get; } = new();
     public LocalizedText L { get; } = new();
     public IReadOnlyList<LanguageOption> Languages { get; } = new[] { new LanguageOption("tr", "Türkçe"), new LanguageOption("en", "English") };
     public string SelectedLanguage { get => _selectedLanguage; set { if (Set(ref _selectedLanguage, value)) SetLanguage(value); } }
@@ -107,11 +108,14 @@ public sealed class MainViewModel : ObservableObject
         catch (Exception ex) { WriteLog($"Application error: {ex}"); }
         finally
         {
+            var findings = DiagnosticAnalyzer.Analyze(results);
+            Findings.Clear();
+            foreach (var finding in findings) Findings.Add(new DiagnosticFindingViewModel(finding, _selectedLanguage));
             try
             {
                 if (!string.IsNullOrWhiteSpace(_store.SessionDirectory))
                 {
-                    await _store.SaveAsync(results);
+                    await _store.SaveAsync(results, findings);
                     LastSession=$"{L["LastSession"]}: {_store.SessionDirectory}";
                 }
             }
@@ -151,6 +155,7 @@ public sealed class MainViewModel : ObservableObject
         Status=L["Ready"]; LastSession=L["NoSession"];
         OnPropertyChanged(nameof(AdministratorStatus));
         foreach (var item in Diagnostics.Concat(SafeRepairs).Concat(ExpertRepairs)) item.SetLanguage(language);
+        foreach (var finding in Findings) finding.SetLanguage(language);
     }
 }
 

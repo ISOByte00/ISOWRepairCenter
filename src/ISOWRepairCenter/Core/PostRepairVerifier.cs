@@ -10,7 +10,8 @@ public sealed record RepairVerificationResult(
     DateTimeOffset FinishedAt,
     IReadOnlyList<OperationResult> Checks,
     IReadOnlyList<DiagnosticFinding> Findings,
-    string Summary);
+    string Summary,
+    bool BaselineCaptured = false);
 
 public sealed record VerificationCheck(string Id, string Title, IReadOnlyList<CommandStep> Steps);
 
@@ -84,7 +85,7 @@ public sealed class PostRepairVerifier
 
     private static string SummaryFor(VerificationOutcome outcome) => outcome switch
     {
-        VerificationOutcome.Verified => "Post-repair checks completed and recognized healthy results.",
+        VerificationOutcome.Verified => "Post-repair checks completed and recognized healthy results. No pre-repair baseline was captured, so improvement was not measured.",
         VerificationOutcome.VerificationFailed => "Post-repair checks completed, but at least one repaired condition is still present.",
         VerificationOutcome.Cancelled => "Post-repair verification was cancelled before a conclusion was reached.",
         _ => "Post-repair verification could not establish a conclusion."

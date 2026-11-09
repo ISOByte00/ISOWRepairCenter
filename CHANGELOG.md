@@ -9,6 +9,7 @@
 - Added evidence-linked guided repair suggestions for DISM and SFC integrity findings; suggestions never select or start a repair.
 - Added a separate, testable post-repair verification model for the DISM/SFC repair workflow; it is not yet wired to execute from the UI.
 - Wired the DISM/SFC post-repair verification into the user-approved Safe Repairs flow, command preview, session report, and separate verification JSON report.
+- Clarified that verified post-checks do not claim measured improvement without a pre-repair baseline, and report verification cancellation separately from repair cancellation.
 
 ## 0.5.0
 

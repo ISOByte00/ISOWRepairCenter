@@ -271,6 +271,31 @@ public sealed class OperationTests
     }
 
     [TestMethod]
+    public async Task Post_repair_verifier_classifies_cancelled_failed_and_incomplete_checks_without_claiming_success()
+    {
+        var store = CreateStore();
+        var repair = OperationCatalog.Create().Single(x => x.Id == "system-file-repair");
+        var cancelled = await new PostRepairVerifier(new OutcomeRunner(OperationOutcome.Cancelled), store).VerifyAsync(repair, 1, _ => { }, CancellationToken.None);
+        var failed = await new PostRepairVerifier(new OutcomeRunner(OperationOutcome.Failed), store).VerifyAsync(repair, 2, _ => { }, CancellationToken.None);
+        var incomplete = await new PostRepairVerifier(new VerificationRunner(string.Empty), store).VerifyAsync(repair, 3, _ => { }, CancellationToken.None);
+
+        Assert.AreEqual(VerificationOutcome.Cancelled, cancelled.Outcome);
+        Assert.AreEqual(VerificationOutcome.Unknown, failed.Outcome);
+        Assert.AreEqual(VerificationOutcome.Unknown, incomplete.Outcome);
+    }
+
+    [TestMethod]
+    public async Task Session_store_records_verification_result_and_baseline_state()
+    {
+        var store = CreateStore();
+        var verification = new RepairVerificationResult("system-file-repair", "Repair system image and files", VerificationOutcome.Verified, DateTimeOffset.Now, DateTimeOffset.Now, Array.Empty<OperationResult>(), Array.Empty<DiagnosticFinding>(), "Healthy checks.");
+        await store.SaveAsync(Array.Empty<OperationResult>(), verifications: new[] { verification });
+
+        Assert.IsTrue(File.Exists(Path.Combine(store.SessionDirectory, "verifications.json")));
+        StringAssert.Contains(File.ReadAllText(Path.Combine(store.SessionDirectory, "report.txt")), "Pre-repair baseline: not captured");
+    }
+
+    [TestMethod]
     public void Findings_are_sorted_by_severity_then_confidence()
     {
         var results = new[]
@@ -379,6 +404,15 @@ public sealed class OperationTests
             var output = step.FileName.Equals("sfc.exe", StringComparison.OrdinalIgnoreCase) ? sfcOutput : "No component store corruption detected.";
             File.WriteAllText(outputFile, output);
             return Task.FromResult(new StepResult(step.FileName, step.Preview, 0, TimeSpan.Zero, OperationOutcome.Succeeded, outputFile, null, "Fake result."));
+        }
+    }
+
+    private sealed class OutcomeRunner(OperationOutcome outcome) : IProcessRunner
+    {
+        public Task<StepResult> RunAsync(CommandStep step, string outputFile, Action<string> onOutput, CancellationToken cancellationToken)
+        {
+            File.WriteAllText(outputFile, "fixture");
+            return Task.FromResult(new StepResult(step.FileName, step.Preview, outcome == OperationOutcome.Succeeded ? 0 : 1, TimeSpan.Zero, outcome, outputFile, null, "Fake result."));
         }
     }
 }

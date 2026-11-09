@@ -173,7 +173,7 @@ public sealed class MainViewModel : ObservableObject
             finally
             {
                 FlushLog();
-                Status=stoppedBeforeExecution || results.Any(x => x.Cancelled) ? L["Cancelled"] : results.Count > 0 && results.All(x => x.Succeeded) && verifications.All(x => x.Outcome is VerificationOutcome.Verified or VerificationOutcome.NotApplicable) ? L["Completed"] : L["CompletedWarnings"];
+                Status=stoppedBeforeExecution || results.Any(x => x.Cancelled) ? L["Cancelled"] : verifications.Any(x => x.Outcome == VerificationOutcome.Cancelled) ? L["VerificationCancelled"] : results.Count > 0 && results.All(x => x.Succeeded) && verifications.All(x => x.Outcome is VerificationOutcome.Verified or VerificationOutcome.NotApplicable) ? L["Completed"] : L["CompletedWarnings"];
                 IsRunning=false; _cancellation?.Dispose(); _cancellation=null;
                 completion.TrySetResult();
                 if (ReferenceEquals(_runCompletion, completion)) _runCompletion=null;

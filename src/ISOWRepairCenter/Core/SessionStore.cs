@@ -43,7 +43,7 @@ public sealed class SessionStore
             text.AppendLine("Post-repair verification:");
             foreach (var verification in resolvedVerifications)
             {
-                text.AppendLine($"  [{verification.Outcome}] {verification.RepairOperationTitle}: {verification.Summary}");
+                text.AppendLine($"  [{verification.Outcome}] {verification.RepairOperationTitle}: {verification.Summary}\n    Pre-repair baseline: {(verification.BaselineCaptured ? "captured" : "not captured")}");
                 foreach (var check in verification.Checks) text.AppendLine($"    {check.Title}: {check.Outcome}");
             }
             text.AppendLine();

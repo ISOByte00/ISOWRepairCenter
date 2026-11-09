@@ -14,6 +14,7 @@ public sealed class MainViewModel : ObservableObject
 {
     private readonly SessionStore _store = new();
     private readonly ProcessRunner _runner = new();
+    private readonly UserPreferencesStore _preferences = new();
     private readonly ConcurrentQueue<string> _pendingLog = new();
     private readonly DispatcherTimer _logTimer;
     private const int MaxLiveLogCharacters = 200_000;
@@ -36,7 +37,7 @@ public sealed class MainViewModel : ObservableObject
     public ObservableCollection<DiagnosticFindingViewModel> Findings { get; } = new();
     public LocalizedText L { get; } = new();
     public IReadOnlyList<LanguageOption> Languages { get; } = new[] { new LanguageOption("tr", "Türkçe"), new LanguageOption("en", "English") };
-    public string SelectedLanguage { get => _selectedLanguage; set { if (Set(ref _selectedLanguage, value)) SetLanguage(value); } }
+    public string SelectedLanguage { get => _selectedLanguage; set { if (Set(ref _selectedLanguage, value)) { _preferences.SaveLanguage(value); SetLanguage(value); } } }
     public string Status { get => _status; private set => Set(ref _status, value); }
     public string LiveLog { get => _liveLog; private set => Set(ref _liveLog, value); }
     public string DismSource { get => _dismSource; set => Set(ref _dismSource, value); }
@@ -73,6 +74,7 @@ public sealed class MainViewModel : ObservableObject
 
     public MainViewModel()
     {
+        _selectedLanguage = _preferences.LoadLanguage();
         var all = OperationCatalog.Create().Select(x => new OperationViewModel(x)).ToList();
         Diagnostics = new(all.Where(x => x.Operation.Category == OperationCategory.Diagnostic));
         foreach (var diagnostic in Diagnostics) diagnostic.PropertyChanged += (_, args) => { if (args.PropertyName == nameof(OperationViewModel.IsSelected)) OnPropertyChanged(nameof(SelectedDiagnosticsText)); };
@@ -121,7 +123,7 @@ public sealed class MainViewModel : ObservableObject
         IsRunning=true; LiveLog=string.Empty; _cancellation=new CancellationTokenSource();
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _runCompletion=completion;
-        var executor = new RepairExecutor(_runner, _store); var baselineCapture = new PreRepairBaselineCapture(_runner, _store); var verifier = new PostRepairVerifier(_runner, _store); var restorePoints = new RestorePointService(_runner); var results=new List<OperationResult>(); var baselines = new List<RepairBaselineResult>(); var verifications = new List<RepairVerificationResult>();
+        var executor = new RepairExecutor(_runner, _store); var baselineCapture = new PreRepairBaselineCapture(_runner, _store); var verifier = new PostRepairVerifier(_runner, _store); var restorePoints = new RestorePointService(_runner); var results=new List<OperationResult>(); var baselines = new List<RepairBaselineResult>(); var verifications = new List<RepairVerificationResult>(); StepResult? restorePoint = null;
         var stoppedBeforeExecution = false;
         try
         {
@@ -130,13 +132,13 @@ public sealed class MainViewModel : ObservableObject
             if (riskSelected.Count > 0)
             {
                 WriteLog(L["RestoreStart"]);
-                var restore = await restorePoints.TryCreateAsync(_store.StepOutputPath(0, "restore-point"), WriteLog, _cancellation.Token);
-                if (restore.ExitCode != 0 && !restore.Cancelled)
+                restorePoint = await restorePoints.TryCreateAsync(_store.StepOutputPath(0, "restore-point"), WriteLog, _cancellation.Token);
+                if (restorePoint.ExitCode != 0 && !restorePoint.Cancelled)
                 {
                     var proceed = MessageBox.Show(L["RestoreUnavailable"], L["RestoreTitle"], MessageBoxButton.YesNo, MessageBoxImage.Warning);
                     if (proceed != MessageBoxResult.Yes) { stoppedBeforeExecution=true; return; }
                 }
-                if (restore.Cancelled) return;
+                if (restorePoint.Cancelled) { stoppedBeforeExecution=true; return; }
             }
             var number=0;
             foreach (var item in selected)
@@ -175,7 +177,7 @@ public sealed class MainViewModel : ObservableObject
             {
                 if (!string.IsNullOrWhiteSpace(_store.SessionDirectory))
                 {
-                    await _store.SaveAsync(results, findings, verifications, baselines);
+                    await _store.SaveAsync(results, findings, verifications, baselines, restorePoint);
                     LastSession=$"{L["LastSession"]}: {_store.SessionDirectory}";
                 }
             }

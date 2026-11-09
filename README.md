@@ -32,7 +32,7 @@ DISM uses Windows Update by default. If Windows Update cannot provide repair fil
 
 ## Reports
 
-Each session is stored in `%ProgramData%\ISOWRepairCenter\Sessions`. It contains live raw command output, `results.json`, `findings.json`, `baselines.json`, `verifications.json`, `report.txt`, and `report.html`.
+Each session is stored in `%ProgramData%\ISOWRepairCenter\Sessions`. It contains live raw command output, `results.json`, `findings.json`, `baselines.json`, `verifications.json`, optional `safety.json`, `report.txt`, and `report.html`.
 
 Diagnostic findings distinguish severity from confidence. `Known` findings have recognized evidence; `Unknown` and `ManualReviewRequired` findings must be reviewed before deciding on a repair.
 

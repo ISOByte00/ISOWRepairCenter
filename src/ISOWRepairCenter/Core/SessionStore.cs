@@ -18,7 +18,7 @@ public sealed class SessionStore
 
     public string StepOutputPath(int number, string operationId) => Path.Combine(SessionDirectory, $"{number:00}_{operationId}.log");
 
-    public async Task SaveAsync(IReadOnlyList<OperationResult> results, IReadOnlyList<DiagnosticFinding>? findings = null, IReadOnlyList<RepairVerificationResult>? verifications = null, IReadOnlyList<RepairBaselineResult>? baselines = null)
+    public async Task SaveAsync(IReadOnlyList<OperationResult> results, IReadOnlyList<DiagnosticFinding>? findings = null, IReadOnlyList<RepairVerificationResult>? verifications = null, IReadOnlyList<RepairBaselineResult>? baselines = null, StepResult? restorePoint = null)
     {
         if (string.IsNullOrWhiteSpace(SessionDirectory)) throw new InvalidOperationException("A session must be started before saving a report.");
         var json = JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented=true });
@@ -29,7 +29,9 @@ public sealed class SessionStore
         await File.WriteAllTextAsync(Path.Combine(SessionDirectory, "findings.json"), JsonSerializer.Serialize(resolvedFindings, new JsonSerializerOptions { WriteIndented=true }), Encoding.UTF8);
         await File.WriteAllTextAsync(Path.Combine(SessionDirectory, "verifications.json"), JsonSerializer.Serialize(resolvedVerifications, new JsonSerializerOptions { WriteIndented=true }), Encoding.UTF8);
         await File.WriteAllTextAsync(Path.Combine(SessionDirectory, "baselines.json"), JsonSerializer.Serialize(resolvedBaselines, new JsonSerializerOptions { WriteIndented=true }), Encoding.UTF8);
+        if (restorePoint is not null) await File.WriteAllTextAsync(Path.Combine(SessionDirectory, "safety.json"), JsonSerializer.Serialize(restorePoint, new JsonSerializerOptions { WriteIndented=true }), Encoding.UTF8);
         var text = new StringBuilder("ISOByte ISOWRepairCenter session\n\n");
+        if (restorePoint is not null) text.AppendLine($"System restore point: {restorePoint.Outcome}\n  Evidence: {restorePoint.Evidence}\n  Error: {restorePoint.Error ?? "None"}\n");
         if (resolvedFindings.Count > 0)
         {
             text.AppendLine("Diagnostic findings:");

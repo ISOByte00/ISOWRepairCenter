@@ -12,6 +12,7 @@
 - Clarified that verified post-checks do not claim measured improvement without a pre-repair baseline, and report verification cancellation separately from repair cancellation.
 - Added a separate pre-repair baseline and conservative change-analysis model for the DISM/SFC repair workflow; UI execution is not yet enabled.
 - Added the user-approved pre-repair baseline to the DISM/SFC repair preview, session report, JSON artifacts, and conservative post-repair change assessment.
+- Persisted the selected application language and added restore-point attempt results to the session safety report.
 
 ## 0.5.0
 

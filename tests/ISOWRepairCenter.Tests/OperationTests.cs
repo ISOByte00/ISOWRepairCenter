@@ -326,6 +326,30 @@ public sealed class OperationTests
     }
 
     [TestMethod]
+    public async Task Session_store_records_restore_point_result_when_attempted()
+    {
+        var store = CreateStore();
+        var restorePoint = new StepResult("Create restore point", "powershell", 1, TimeSpan.Zero, OperationOutcome.Failed, "restore.log", "Disabled.", "Restore point creation failed.");
+        await store.SaveAsync(Array.Empty<OperationResult>(), restorePoint: restorePoint);
+
+        Assert.IsTrue(File.Exists(Path.Combine(store.SessionDirectory, "safety.json")));
+        StringAssert.Contains(File.ReadAllText(Path.Combine(store.SessionDirectory, "report.txt")), "System restore point: Failed");
+    }
+
+    [TestMethod]
+    public void User_preferences_persist_supported_language_and_fall_back_safely()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "IsoWrcTest_" + Guid.NewGuid().ToString("N"), "preferences.json");
+        var preferences = new UserPreferencesStore(path);
+
+        Assert.AreEqual("tr", preferences.LoadLanguage());
+        preferences.SaveLanguage("en");
+        Assert.AreEqual("en", preferences.LoadLanguage());
+        preferences.SaveLanguage("unsupported");
+        Assert.AreEqual("en", preferences.LoadLanguage());
+    }
+
+    [TestMethod]
     public void Findings_are_sorted_by_severity_then_confidence()
     {
         var results = new[]

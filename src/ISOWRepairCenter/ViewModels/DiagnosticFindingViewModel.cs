@@ -11,11 +11,13 @@ public sealed class DiagnosticFindingViewModel : ObservableObject
     public string Recommendation => TurkishTranslation?.Recommendation ?? Finding.Recommendation;
     public FindingSeverity Severity => Finding.Severity;
     public string SeverityLabel => _language == "tr" ? Severity switch { FindingSeverity.Critical => "Kritik", FindingSeverity.Warning => "Uyarı", _ => "Bilgi" } : Severity.ToString();
+    public string SeverityColor => Severity switch { FindingSeverity.Critical => "#FCA5A5", FindingSeverity.Warning => "#FCD34D", _ => "#86EFAC" };
     public string ConfidenceLabel => _language == "tr" ? Finding.Confidence switch { FindingConfidence.Known => "Doğrulandı", FindingConfidence.Unknown => "Bilinmiyor", _ => "Manuel inceleme gerekli" } : Finding.Confidence switch { FindingConfidence.Known => "Known", FindingConfidence.Unknown => "Unknown", _ => "Manual review required" };
     public string OperationTitle => _language == "tr" && TurkishOperationTitles.TryGetValue(Finding.OperationId, out var title) ? title : Finding.OperationTitle;
+    public string SuggestedRepairText => string.IsNullOrWhiteSpace(Finding.SuggestedOperationId) ? string.Empty : _language == "tr" ? "Önerilen yönlendirmeli onarım: Sistem imajı ve dosyalarını onar" : "Suggested guided repair: Repair system image and files";
 
     public DiagnosticFindingViewModel(DiagnosticFinding finding, string language) { Finding = finding; _language = language; }
-    public void SetLanguage(string language) { _language = language; OnPropertyChanged(nameof(Summary)); OnPropertyChanged(nameof(Evidence)); OnPropertyChanged(nameof(Recommendation)); OnPropertyChanged(nameof(SeverityLabel)); OnPropertyChanged(nameof(ConfidenceLabel)); OnPropertyChanged(nameof(OperationTitle)); }
+    public void SetLanguage(string language) { _language = language; OnPropertyChanged(nameof(Summary)); OnPropertyChanged(nameof(Evidence)); OnPropertyChanged(nameof(Recommendation)); OnPropertyChanged(nameof(SeverityLabel)); OnPropertyChanged(nameof(ConfidenceLabel)); OnPropertyChanged(nameof(OperationTitle)); OnPropertyChanged(nameof(SuggestedRepairText)); }
 
     private Translation? TurkishTranslation => _language == "tr" && Turkish.TryGetValue(Finding.Code, out var text) ? text : null;
 

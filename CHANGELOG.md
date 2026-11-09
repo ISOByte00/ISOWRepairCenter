@@ -5,6 +5,8 @@
 - Began v0.6 structured Event Log analysis: storage and critical System events now use a locale-independent JSON schema, with conservative NVMe reset, NTFS integrity, disk retry, de-duplication, and temporal-overlap findings.
 - Hardened Event Log collection failures, RecordId-based de-duplication, and NVMe burst detection.
 - Added an instant Diagnostics search box without changing selections or run behavior.
+- Added a localized Dashboard finding summary and severity-specific visual labels.
+- Added evidence-linked guided repair suggestions for DISM and SFC integrity findings; suggestions never select or start a repair.
 
 ## 0.5.0
 

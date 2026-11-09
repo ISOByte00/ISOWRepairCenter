@@ -51,6 +51,18 @@ public sealed class MainViewModel : ObservableObject
         }
     }
     public string SelectedDiagnosticsText => string.Format(L["SelectedDiagnostics"], Diagnostics.Count(x => x.IsSelected));
+    public string FindingSummary
+    {
+        get
+        {
+            if (Findings.Count == 0) return L["NoFindings"];
+            var critical = Findings.Count(x => x.Severity == FindingSeverity.Critical);
+            var warnings = Findings.Count(x => x.Severity == FindingSeverity.Warning);
+            var review = Findings.Count(x => x.Finding.Confidence != FindingConfidence.Known);
+            var informational = Findings.Count(x => x.Severity == FindingSeverity.Information && x.Finding.Confidence == FindingConfidence.Known);
+            return string.Format(L["FindingSummary"], critical, warnings, review, informational);
+        }
+    }
     public bool IsRunning { get => _isRunning; private set { if(Set(ref _isRunning, value)) { OnPropertyChanged(nameof(CanStart)); OnPropertyChanged(nameof(CanCancel)); } } }
     public bool CanStart => !IsRunning;
     public bool CanCancel => IsRunning;
@@ -140,6 +152,7 @@ public sealed class MainViewModel : ObservableObject
             var findings = DiagnosticAnalyzer.Analyze(results);
             Findings.Clear();
             foreach (var finding in findings) Findings.Add(new DiagnosticFindingViewModel(finding, _selectedLanguage));
+            OnPropertyChanged(nameof(FindingSummary));
             try
             {
                 if (!string.IsNullOrWhiteSpace(_store.SessionDirectory))
@@ -183,6 +196,7 @@ public sealed class MainViewModel : ObservableObject
         L.Language=language;
         Status=L["Ready"]; LastSession=L["NoSession"];
         OnPropertyChanged(nameof(SelectedDiagnosticsText));
+        OnPropertyChanged(nameof(FindingSummary));
         OnPropertyChanged(nameof(AdministratorStatus));
         OnPropertyChanged(nameof(QuickDiagnosticsLabel));
         foreach (var item in Diagnostics.Concat(SafeRepairs).Concat(ExpertRepairs)) item.SetLanguage(language);

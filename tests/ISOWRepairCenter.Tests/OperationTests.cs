@@ -278,6 +278,7 @@ public sealed class OperationTests
         var viewModel = new DiagnosticFindingViewModel(finding, "tr");
 
         Assert.AreEqual("Bilgi", viewModel.SeverityLabel);
+        Assert.AreEqual("#86EFAC", viewModel.SeverityColor);
         Assert.AreEqual("Doğrulandı", viewModel.ConfidenceLabel);
         Assert.AreEqual("Dosya sistemi dirty bit durumu", viewModel.OperationTitle);
     }
@@ -294,7 +295,9 @@ public sealed class OperationTests
 
         Assert.AreEqual(FindingConfidence.Known, dismHealthy.Confidence);
         Assert.AreEqual(FindingSeverity.Warning, dismRepairable.Severity);
+        Assert.AreEqual("system-file-repair", dismRepairable.SuggestedOperationId);
         Assert.AreEqual(FindingConfidence.Known, sfcHealthy.Confidence);
+        Assert.IsNull(sfcHealthy.SuggestedOperationId);
         Assert.AreEqual(FindingConfidence.Known, diskHealthy.Confidence);
         Assert.AreEqual(FindingSeverity.Critical, diskUnhealthy.Severity);
         Assert.AreEqual(FindingConfidence.Unknown, unknown.Confidence);

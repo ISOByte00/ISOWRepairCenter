@@ -13,7 +13,8 @@ public sealed record DiagnosticFinding(
     string OperationTitle,
     string Summary,
     string Evidence,
-    string Recommendation);
+    string Recommendation,
+    string? SuggestedOperationId = null);
 
 public static class DiagnosticAnalyzer
 {
@@ -193,7 +194,8 @@ public static class DiagnosticAnalyzer
     private static bool NeedsDismRepair(string output) => output.Contains("component store is repairable", StringComparison.OrdinalIgnoreCase) || (output.Contains("component store corruption", StringComparison.OrdinalIgnoreCase) && !IsDismHealthy(output));
     private static string? ReadJsonString(JsonElement element, string property) => element.TryGetProperty(property, out var value) ? value.ToString() : null;
     private static DiagnosticFinding Unknown(OperationResult result, string code, string evidence) => Create(result, code, FindingSeverity.Information, FindingConfidence.Unknown, "The diagnostic result could not be determined automatically.", evidence, "Review the captured output manually before deciding whether a repair is needed.");
-    private static DiagnosticFinding Create(OperationResult result, string code, FindingSeverity severity, FindingConfidence confidence, string summary, string evidence, string recommendation) => new(code, severity, confidence, result.Id, result.Title, summary, evidence, recommendation);
+    private static DiagnosticFinding Create(OperationResult result, string code, FindingSeverity severity, FindingConfidence confidence, string summary, string evidence, string recommendation) => new(code, severity, confidence, result.Id, result.Title, summary, evidence, recommendation, SuggestedOperationFor(code));
+    private static string? SuggestedOperationFor(string findingCode) => findingCode is "component-store-warning" or "system-files-warning" ? "system-file-repair" : null;
     private static int SortOrder(DiagnosticFinding finding) => finding.Severity switch { FindingSeverity.Critical => 0, FindingSeverity.Warning => 1, _ when finding.Confidence != FindingConfidence.Known => 2, _ => 3 };
 
     private static string ReadOutput(StepResult step)

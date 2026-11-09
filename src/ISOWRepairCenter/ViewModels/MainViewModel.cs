@@ -50,6 +50,7 @@ public sealed class MainViewModel : ObservableObject
             if (Set(ref _diagnosticSearchText, value)) FilteredDiagnostics.Refresh();
         }
     }
+    public string SelectedDiagnosticsText => string.Format(L["SelectedDiagnostics"], Diagnostics.Count(x => x.IsSelected));
     public bool IsRunning { get => _isRunning; private set { if(Set(ref _isRunning, value)) { OnPropertyChanged(nameof(CanStart)); OnPropertyChanged(nameof(CanCancel)); } } }
     public bool CanStart => !IsRunning;
     public bool CanCancel => IsRunning;
@@ -62,6 +63,7 @@ public sealed class MainViewModel : ObservableObject
     {
         var all = OperationCatalog.Create().Select(x => new OperationViewModel(x)).ToList();
         Diagnostics = new(all.Where(x => x.Operation.Category == OperationCategory.Diagnostic));
+        foreach (var diagnostic in Diagnostics) diagnostic.PropertyChanged += (_, args) => { if (args.PropertyName == nameof(OperationViewModel.IsSelected)) OnPropertyChanged(nameof(SelectedDiagnosticsText)); };
         FilteredDiagnostics = CollectionViewSource.GetDefaultView(Diagnostics);
         FilteredDiagnostics.Filter = MatchesDiagnosticSearch;
         SafeRepairs = new(all.Where(x => x.Operation.Category == OperationCategory.SafeRepair));
@@ -180,6 +182,7 @@ public sealed class MainViewModel : ObservableObject
     {
         L.Language=language;
         Status=L["Ready"]; LastSession=L["NoSession"];
+        OnPropertyChanged(nameof(SelectedDiagnosticsText));
         OnPropertyChanged(nameof(AdministratorStatus));
         OnPropertyChanged(nameof(QuickDiagnosticsLabel));
         foreach (var item in Diagnostics.Concat(SafeRepairs).Concat(ExpertRepairs)) item.SetLanguage(language);

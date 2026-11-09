@@ -38,12 +38,21 @@ public static class OperationCatalog
     private static CommandStep Ps(string script, CancellationStrategy cancellationStrategy = CancellationStrategy.Immediate) => new("powershell.exe", new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script }, CancellationStrategy: cancellationStrategy);
     private static string EventLogScript(string filter) => $$"""
         $start=(Get-Date).AddDays(-14)
-        $events=@(Get-WinEvent -FilterHashtable @{LogName='System';StartTime=$start} -ErrorAction SilentlyContinue |
-          Where-Object { {{filter}} } |
-          Sort-Object TimeCreated -Descending |
-          Select-Object -First 100 |
-          ForEach-Object { [PSCustomObject]@{ TimeCreated=$_.TimeCreated.ToString('o'); Id=[int]$_.Id; ProviderName=[string]$_.ProviderName; Level=[int]$_.Level; Message=[string]$_.Message } })
-        [PSCustomObject]@{ SchemaVersion=1; WindowStart=$start.ToString('o'); Events=$events } | ConvertTo-Json -Compress
+        $querySucceeded=$true
+        $queryError=$null
+        try {
+          $events=@(Get-WinEvent -FilterHashtable @{LogName='System';StartTime=$start} -ErrorAction Stop |
+            Where-Object { {{filter}} } |
+            Sort-Object TimeCreated -Descending |
+            Select-Object -First 100 |
+            ForEach-Object { [PSCustomObject]@{ LogName=[string]$_.LogName; RecordId=[long]$_.RecordId; TimeCreated=$_.TimeCreated.ToString('o'); Id=[int]$_.Id; ProviderName=[string]$_.ProviderName; Level=[int]$_.Level; Message=[string]$_.Message } })
+        }
+        catch {
+          $querySucceeded=$false
+          $queryError=$_.Exception.Message
+          $events=@()
+        }
+        [PSCustomObject]@{ SchemaVersion=1; QuerySucceeded=$querySucceeded; Error=$queryError; WindowStart=$start.ToString('o'); Events=$events } | ConvertTo-Json -Compress
         """;
     private const string UpdateResetScript = """
         $ErrorActionPreference='Stop'

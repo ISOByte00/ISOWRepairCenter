@@ -41,6 +41,8 @@ public sealed class OperationTests
 
         Assert.IsTrue(commands.All(x => x.Contains("ConvertTo-Json", StringComparison.Ordinal)));
         Assert.IsTrue(commands.All(x => x.Contains("SchemaVersion=1", StringComparison.Ordinal)));
+        Assert.IsTrue(commands.All(x => x.Contains("QuerySucceeded", StringComparison.Ordinal) && x.Contains("RecordId", StringComparison.Ordinal)));
+        Assert.IsTrue(commands.All(x => x.Contains("-ErrorAction Stop", StringComparison.Ordinal)));
         Assert.IsTrue(commands.All(x => !x.Contains("LevelDisplayName", StringComparison.Ordinal)));
     }
 
@@ -208,7 +210,7 @@ public sealed class OperationTests
     [TestMethod]
     public void Event_log_analyzer_marks_recurring_nvme_resets_for_manual_review()
     {
-        var output = "{\"SchemaVersion\":1,\"Events\":[{\"TimeCreated\":\"2026-11-09T08:10:12+03:00\",\"Id\":129,\"ProviderName\":\"stornvme\",\"Level\":3,\"Message\":\"reset\"},{\"TimeCreated\":\"2026-11-09T08:10:32+03:00\",\"Id\":129,\"ProviderName\":\"stornvme\",\"Level\":3,\"Message\":\"reset\"},{\"TimeCreated\":\"2026-11-09T08:10:52+03:00\",\"Id\":129,\"ProviderName\":\"stornvme\",\"Level\":3,\"Message\":\"reset\"}]}";
+        var output = EventPayload((1, "2026-11-09T08:10:12+03:00", 129, "stornvme"), (2, "2026-11-09T08:10:32+03:00", 129, "stornvme"), (3, "2026-11-09T08:10:52+03:00", 129, "stornvme"));
         var finding = Analyze("storage-events", OperationOutcome.Succeeded, output).Single();
 
         Assert.AreEqual("nvme-reset-events", finding.Code);
@@ -219,8 +221,8 @@ public sealed class OperationTests
     [TestMethod]
     public void Event_log_analyzer_deduplicates_and_does_not_infer_causation_without_time_overlap()
     {
-        var storage = "{\"SchemaVersion\":1,\"Events\":[{\"TimeCreated\":\"2026-11-09T08:00:00+03:00\",\"Id\":129,\"ProviderName\":\"stornvme\",\"Level\":3,\"Message\":\"reset\"}]}";
-        var critical = "{\"SchemaVersion\":1,\"Events\":[{\"TimeCreated\":\"2026-11-09T08:00:00+03:00\",\"Id\":129,\"ProviderName\":\"stornvme\",\"Level\":3,\"Message\":\"reset\"},{\"TimeCreated\":\"2026-11-09T12:00:00+03:00\",\"Id\":55,\"ProviderName\":\"Ntfs\",\"Level\":2,\"Message\":\"integrity\"}]}";
+        var storage = EventPayload((1, "2026-11-09T08:00:00+03:00", 129, "stornvme"));
+        var critical = EventPayload((1, "2026-11-09T08:00:00+03:00", 129, "stornvme"), (2, "2026-11-09T12:00:00+03:00", 55, "Ntfs"));
         var findings = DiagnosticAnalyzer.Analyze(new[] { CreateResult("storage-events", OperationOutcome.Succeeded, storage), CreateResult("critical-events", OperationOutcome.Succeeded, critical) });
 
         Assert.AreEqual(1, findings.Count(x => x.Code == "nvme-reset-events"));
@@ -233,12 +235,24 @@ public sealed class OperationTests
     {
         var invalid = Analyze("storage-events", OperationOutcome.Succeeded, "not json").Single();
         var wrongSchema = Analyze("storage-events", OperationOutcome.Succeeded, "[]").Single();
-        var empty = Analyze("storage-events", OperationOutcome.Succeeded, "{\"SchemaVersion\":1,\"Events\":[]}").Single();
+        var empty = Analyze("storage-events", OperationOutcome.Succeeded, EventPayload()).Single();
+        var failedQuery = Analyze("storage-events", OperationOutcome.Succeeded, "{\"SchemaVersion\":1,\"QuerySucceeded\":false,\"Events\":[]}").Single();
 
         Assert.AreEqual(FindingConfidence.Unknown, invalid.Confidence);
         Assert.AreEqual(FindingConfidence.Unknown, wrongSchema.Confidence);
         Assert.AreEqual("event-log-no-matching-patterns", empty.Code);
         Assert.AreEqual(FindingConfidence.Known, empty.Confidence);
+        Assert.AreEqual("event-log-query-failed", failedQuery.Code);
+        Assert.AreEqual(FindingConfidence.ManualReviewRequired, failedQuery.Confidence);
+    }
+
+    [TestMethod]
+    public void Event_log_analyzer_detects_a_recurring_cluster_even_when_later_events_are_far_apart()
+    {
+        var output = EventPayload((1, "2026-11-09T08:00:00+03:00", 129, "stornvme"), (2, "2026-11-09T08:03:00+03:00", 129, "stornvme"), (3, "2026-11-09T08:06:00+03:00", 129, "stornvme"), (4, "2026-11-10T12:00:00+03:00", 129, "stornvme"));
+        var finding = Analyze("storage-events", OperationOutcome.Succeeded, output).Single();
+
+        Assert.AreEqual(FindingSeverity.Warning, finding.Severity);
     }
 
     [TestMethod]
@@ -299,6 +313,13 @@ public sealed class OperationTests
     }
 
     private static string Fixture(string name) => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", name));
+
+    private static string EventPayload(params (long RecordId, string TimeCreated, int Id, string ProviderName)[] events) => System.Text.Json.JsonSerializer.Serialize(new
+    {
+        SchemaVersion = 1,
+        QuerySucceeded = true,
+        Events = events.Select(x => new { LogName = "System", x.RecordId, x.TimeCreated, x.Id, x.ProviderName, Level = 3, Message = "fixture" })
+    });
 
     private static OperationResult CreateResult(string id, OperationOutcome outcome, string output, string? root = null) => CreateResult(id, outcome, new[] { output }, root);
     private static OperationResult CreateResult(string id, OperationOutcome outcome, string[] outputs, string? root = null)

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Hardened v0.6 repair verification: DISM and SFC baseline changes are assessed independently, with explicit evidence and no improvement claim for an already healthy baseline or a mixed regression.
+- Kept baseline, repair, and post-check cancellation distinct; post-check errors and restart-deferred checks now preserve the repair result without claiming verified success.
+- Added `scripts/Verify-V06.ps1` for restore, Release build/test, portable publish, and SHA-256 verification without performing any Windows repair.
 - Began v0.6 structured Event Log analysis: storage and critical System events now use a locale-independent JSON schema, with conservative NVMe reset, NTFS integrity, disk retry, de-duplication, and temporal-overlap findings.
 - Hardened Event Log collection failures, RecordId-based de-duplication, and NVMe burst detection.
 - Added an instant Diagnostics search box without changing selections or run behavior.

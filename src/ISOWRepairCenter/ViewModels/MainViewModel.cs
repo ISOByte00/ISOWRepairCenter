@@ -125,6 +125,9 @@ public sealed class MainViewModel : ObservableObject
         _runCompletion=completion;
         var executor = new RepairExecutor(_runner, _store); var baselineCapture = new PreRepairBaselineCapture(_runner, _store); var verifier = new PostRepairVerifier(_runner, _store); var restorePoints = new RestorePointService(_runner); var results=new List<OperationResult>(); var baselines = new List<RepairBaselineResult>(); var verifications = new List<RepairVerificationResult>(); StepResult? restorePoint = null;
         var stoppedBeforeExecution = false;
+        var baselineCancelled = false;
+        var repairCancelled = false;
+        var verificationCancelled = false;
         try
         {
             _store.Start();
@@ -148,21 +151,44 @@ public sealed class MainViewModel : ObservableObject
                 {
                     Status = L["CapturingBaseline"];
                     WriteLog($"\n[{DateTime.Now:T}] {L["CapturingBaseline"]}: {item.Title}");
-                    baseline = await baselineCapture.CaptureAsync(item.Operation, number + 1, WriteLog, _cancellation.Token);
+                    try
+                    {
+                        baseline = await baselineCapture.CaptureAsync(item.Operation, number + 1, WriteLog, _cancellation.Token);
+                    }
+                    catch (Exception ex)
+                    {
+                        WriteLog($"Baseline capture failed: {ex.Message}");
+                        baseline = new RepairBaselineResult(item.Operation.Id, item.Operation.Title, BaselineOutcome.Unknown, DateTimeOffset.Now, DateTimeOffset.Now, Array.Empty<OperationResult>(), Array.Empty<DiagnosticFinding>());
+                    }
                     baselines.Add(baseline);
-                    if (baseline.Outcome == BaselineOutcome.Cancelled) break;
+                    if (baseline.Outcome == BaselineOutcome.Cancelled) { baselineCancelled = true; break; }
                 }
                 number++; Status=$"{L["Running"]} {number}/{selected.Count}: {item.Title}"; WriteLog($"\n[{DateTime.Now:T}] {item.Title}");
                 var result=await executor.ExecuteAsync(item.Operation, inputs, number, WriteLog, _cancellation.Token); results.Add(result);
-                if (result.Cancelled) break;
-                if (result.Succeeded && RepairVerificationCatalog.For(item.Operation.Id).Count > 0)
+                if (result.Cancelled) { repairCancelled = true; break; }
+                if (result.Succeeded && (item.Operation.Category is OperationCategory.SafeRepair or OperationCategory.ExpertRepair) && RepairVerificationCatalog.For(item.Operation.Id).Count > 0)
                 {
+                    if (item.Operation.RequiresRestart)
+                    {
+                        var deferred = new RepairVerificationResult(item.Operation.Id, item.Operation.Title, VerificationOutcome.Deferred, DateTimeOffset.Now, DateTimeOffset.Now, Array.Empty<OperationResult>(), Array.Empty<DiagnosticFinding>(), PostRepairVerifier.SummaryFor(VerificationOutcome.Deferred));
+                        verifications.Add(RepairChangeAnalyzer.Apply(baseline, deferred));
+                        continue;
+                    }
                     Status = L["RunningVerification"];
                     WriteLog($"\n[{DateTime.Now:T}] {L["RunningVerification"]}: {item.Title}");
-                    var verification = await verifier.VerifyAsync(item.Operation, number, WriteLog, _cancellation.Token);
-                    verification = verification with { BaselineCaptured = baseline?.Outcome == BaselineOutcome.Captured, ChangeOutcome = RepairChangeAnalyzer.Compare(baseline, verification) };
+                    RepairVerificationResult verification;
+                    try
+                    {
+                        verification = await verifier.VerifyAsync(item.Operation, number, WriteLog, _cancellation.Token);
+                    }
+                    catch (Exception ex)
+                    {
+                        WriteLog($"Post-repair verification failed: {ex.Message}");
+                        verification = new RepairVerificationResult(item.Operation.Id, item.Operation.Title, VerificationOutcome.Unknown, DateTimeOffset.Now, DateTimeOffset.Now, Array.Empty<OperationResult>(), Array.Empty<DiagnosticFinding>(), "Post-repair verification encountered an error before a conclusion was reached.");
+                    }
+                    verification = RepairChangeAnalyzer.Apply(baseline, verification);
                     verifications.Add(verification);
-                    if (verification.Outcome == VerificationOutcome.Cancelled) break;
+                    if (verification.Outcome == VerificationOutcome.Cancelled) { verificationCancelled = true; break; }
                 }
             }
         }
@@ -185,7 +211,11 @@ public sealed class MainViewModel : ObservableObject
             finally
             {
                 FlushLog();
-                Status=stoppedBeforeExecution || results.Any(x => x.Cancelled) ? L["Cancelled"] : verifications.Any(x => x.Outcome == VerificationOutcome.Cancelled) ? L["VerificationCancelled"] : results.Count > 0 && results.All(x => x.Succeeded) && verifications.All(x => x.Outcome is VerificationOutcome.Verified or VerificationOutcome.NotApplicable) ? L["Completed"] : L["CompletedWarnings"];
+                Status = stoppedBeforeExecution || baselineCancelled ? L["BaselineCancelled"]
+                    : repairCancelled ? L["Cancelled"]
+                    : verificationCancelled ? L["VerificationCancelled"]
+                    : results.Count > 0 && results.All(x => x.Succeeded) && verifications.All(x => x.Outcome is VerificationOutcome.Verified or VerificationOutcome.NotApplicable) ? L["Completed"]
+                    : L["CompletedWarnings"];
                 IsRunning=false; _cancellation?.Dispose(); _cancellation=null;
                 completion.TrySetResult();
                 if (ReferenceEquals(_runCompletion, completion)) _runCompletion=null;

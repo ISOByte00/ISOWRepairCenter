@@ -16,6 +16,9 @@ public sealed class SessionHistoryViewModel : ObservableObject
     private SessionHistorySessionItemViewModel? _selectedSession;
     private string _status = string.Empty;
     private bool _isLoading;
+    private HistoryStatus _statusKind = HistoryStatus.Ready;
+    private int _statusCount;
+    private string? _statusDetail;
 
     public ObservableCollection<SessionHistorySessionItemViewModel> Sessions { get; } = new();
     public ObservableCollection<SessionHistoryComparisonItemViewModel> ComparisonEntries { get; } = new();
@@ -33,13 +36,13 @@ public sealed class SessionHistoryViewModel : ObservableObject
         _text = text;
         _sessionsRoot = sessionsRoot ?? new SessionStore().Root;
         _comparer = comparer ?? new SessionHistoryComparer();
-        Status = _text["HistoryReady"];
+        SetStatus(HistoryStatus.Ready);
     }
 
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
         IsLoading = true;
-        Status = _text["HistoryLoading"];
+        SetStatus(HistoryStatus.Loading);
         ComparisonEntries.Clear(); Issues.Clear();
         try
         {
@@ -57,48 +60,76 @@ public sealed class SessionHistoryViewModel : ObservableObject
             EarlierSession = Sessions.Count > 1 ? Sessions[1] : null;
             LaterSession = Sessions.FirstOrDefault();
             foreach (var issue in Sessions.SelectMany(x => x.Session.Issues)) Issues.Add(issue);
-            Status = Sessions.Count switch { 0 => _text["HistoryEmpty"], 1 => _text["HistorySingle"], _ => string.Format(_text["HistoryLoaded"], Sessions.Count) };
+            SetStatus(Sessions.Count switch { 0 => HistoryStatus.Empty, 1 => HistoryStatus.Single, _ => HistoryStatus.Loaded }, Sessions.Count);
         }
-        catch (OperationCanceledException) { Status = _text["HistoryCancelled"]; }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Status = string.Format(_text["HistoryLoadFailed"], ex.Message); }
+        catch (OperationCanceledException) { SetStatus(HistoryStatus.Cancelled); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { SetStatus(HistoryStatus.LoadFailed, detail: ex.Message); }
         finally { IsLoading = false; }
     }
 
     public async Task CompareAsync(CancellationToken cancellationToken = default)
     {
         ComparisonEntries.Clear(); Issues.Clear();
-        if (!CanCompare) { Status = _text["HistoryChooseTwo"]; return; }
+        if (!CanCompare) { SetStatus(HistoryStatus.ChooseTwo); return; }
         IsLoading = true;
-        Status = _text["HistoryComparing"];
+        SetStatus(HistoryStatus.Comparing);
         try
         {
             // Re-read at comparison time so a session cannot become stale after listing.
             var comparison = await _comparer.CompareAsync(EarlierSession!.Path, LaterSession!.Path, cancellationToken);
             foreach (var entry in comparison.Entries) ComparisonEntries.Add(new SessionHistoryComparisonItemViewModel(entry, _text));
             foreach (var issue in comparison.Earlier.Issues.Concat(comparison.Later.Issues)) Issues.Add(issue);
-            Status = ComparisonEntries.Count == 0 ? _text["HistoryNoDifferences"] : string.Format(_text["HistoryCompared"], ComparisonEntries.Count);
+            SetStatus(ComparisonEntries.Count == 0 ? HistoryStatus.NoDifferences : HistoryStatus.Compared, ComparisonEntries.Count);
         }
-        catch (OperationCanceledException) { Status = _text["HistoryCancelled"]; }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Status = string.Format(_text["HistoryCompareFailed"], ex.Message); }
+        catch (OperationCanceledException) { SetStatus(HistoryStatus.Cancelled); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { SetStatus(HistoryStatus.CompareFailed, detail: ex.Message); }
         finally { IsLoading = false; }
     }
 
     public void OpenSelectedReport()
     {
         var session = SelectedSession;
-        if (session is null) { Status = _text["HistorySelectReport"]; return; }
+        if (session is null) { SetStatus(HistoryStatus.SelectReport); return; }
         var report = new[] { "report.html", "report.txt" }.Select(x => Path.Combine(session.Path, x)).FirstOrDefault(File.Exists);
-        if (report is null) { Status = _text["HistoryReportMissing"]; return; }
+        if (report is null) { SetStatus(HistoryStatus.ReportMissing); return; }
         try { Process.Start(new ProcessStartInfo(report) { UseShellExecute = true }); }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or UnauthorizedAccessException) { Status = string.Format(_text["HistoryOpenFailed"], ex.Message); }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or UnauthorizedAccessException) { SetStatus(HistoryStatus.OpenFailed, detail: ex.Message); }
     }
 
     public void RefreshLanguage()
     {
         foreach (var item in Sessions) item.RefreshLanguage();
         foreach (var item in ComparisonEntries) item.RefreshLanguage();
-        OnPropertyChanged(nameof(Status));
+        Status = LocalizeStatus();
     }
+
+    private void SetStatus(HistoryStatus kind, int count = 0, string? detail = null)
+    {
+        _statusKind = kind;
+        _statusCount = count;
+        _statusDetail = detail;
+        Status = LocalizeStatus();
+    }
+
+    private string LocalizeStatus() => _statusKind switch
+    {
+        HistoryStatus.Ready => _text["HistoryReady"],
+        HistoryStatus.Loading => _text["HistoryLoading"],
+        HistoryStatus.Empty => _text["HistoryEmpty"],
+        HistoryStatus.Single => _text["HistorySingle"],
+        HistoryStatus.Loaded => string.Format(_text["HistoryLoaded"], _statusCount),
+        HistoryStatus.Cancelled => _text["HistoryCancelled"],
+        HistoryStatus.LoadFailed => string.Format(_text["HistoryLoadFailed"], _statusDetail),
+        HistoryStatus.ChooseTwo => _text["HistoryChooseTwo"],
+        HistoryStatus.Comparing => _text["HistoryComparing"],
+        HistoryStatus.NoDifferences => _text["HistoryNoDifferences"],
+        HistoryStatus.Compared => string.Format(_text["HistoryCompared"], _statusCount),
+        HistoryStatus.CompareFailed => string.Format(_text["HistoryCompareFailed"], _statusDetail),
+        HistoryStatus.SelectReport => _text["HistorySelectReport"],
+        HistoryStatus.ReportMissing => _text["HistoryReportMissing"],
+        HistoryStatus.OpenFailed => string.Format(_text["HistoryOpenFailed"], _statusDetail),
+        _ => _text["HistoryReady"]
+    };
 
     private static IReadOnlyList<(string Path, DateTimeOffset CreatedAt)> EnumerateDirectories(string root)
     {
@@ -115,6 +146,8 @@ public sealed class SessionHistoryViewModel : ObservableObject
         if (!name.StartsWith(prefix, StringComparison.Ordinal) || name.Length < prefix.Length + 15) return null;
         return DateTime.TryParseExact(name.Substring(prefix.Length, 15), "yyyyMMdd_HHmmss", null, System.Globalization.DateTimeStyles.AssumeLocal, out var value) ? new DateTimeOffset(value) : null;
     }
+
+    private enum HistoryStatus { Ready, Loading, Empty, Single, Loaded, Cancelled, LoadFailed, ChooseTwo, Comparing, NoDifferences, Compared, CompareFailed, SelectReport, ReportMissing, OpenFailed }
 }
 
 public sealed class SessionHistorySessionItemViewModel : ObservableObject

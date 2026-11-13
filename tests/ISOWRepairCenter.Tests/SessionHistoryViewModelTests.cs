@@ -70,6 +70,19 @@ public sealed class SessionHistoryViewModelTests
         Assert.AreEqual(2, viewModel.Sessions.Count); Assert.IsTrue(viewModel.Issues.Any(x => x.Code == "MissingFile"));
     }
 
+    [TestMethod] public async Task Refreshing_language_relocalizes_the_current_history_status()
+    {
+        var text = new LocalizedText { Language = "en" };
+        var viewModel = new SessionHistoryViewModel(text, Temp());
+        await viewModel.RefreshAsync();
+        StringAssert.Contains(viewModel.Status, "No saved sessions");
+
+        text.Language = "tr";
+        viewModel.RefreshLanguage();
+
+        StringAssert.Contains(viewModel.Status, "Kayıtlı oturum");
+    }
+
     private static SessionHistoryViewModel Create(string root) => new(new LocalizedText { Language = "en" }, root);
     private static void WriteSession(string root, string name, object? finding = null, string operationId = "dirty-bit", bool eventOutput = false)
     {

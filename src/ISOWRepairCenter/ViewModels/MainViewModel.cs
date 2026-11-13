@@ -36,6 +36,7 @@ public sealed class MainViewModel : ObservableObject
     public ObservableCollection<OperationViewModel> ExpertRepairs { get; }
     public ObservableCollection<DiagnosticFindingViewModel> Findings { get; } = new();
     public LocalizedText L { get; } = new();
+    public SessionHistoryViewModel SessionHistory { get; }
     public IReadOnlyList<LanguageOption> Languages { get; } = new[] { new LanguageOption("tr", "Türkçe"), new LanguageOption("en", "English") };
     public string SelectedLanguage { get => _selectedLanguage; set { if (Set(ref _selectedLanguage, value)) { _preferences.SaveLanguage(value); SetLanguage(value); } } }
     public string Status { get => _status; private set => Set(ref _status, value); }
@@ -85,6 +86,7 @@ public sealed class MainViewModel : ObservableObject
         _logTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(125) };
         _logTimer.Tick += (_, _) => FlushLog();
         _logTimer.Start();
+        SessionHistory = new SessionHistoryViewModel(L, _store.Root);
         SetLanguage(_selectedLanguage);
     }
 
@@ -98,6 +100,9 @@ public sealed class MainViewModel : ObservableObject
     {
         if (!string.IsNullOrWhiteSpace(_store.SessionDirectory) && Directory.Exists(_store.SessionDirectory)) Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_store.SessionDirectory}\"") { UseShellExecute=true });
     }
+    public Task RefreshSessionHistoryAsync() => SessionHistory.RefreshAsync();
+    public Task CompareSessionHistoryAsync() => SessionHistory.CompareAsync();
+    public void OpenSelectedHistoryReport() => SessionHistory.OpenSelectedReport();
 
     private Task RunSelectedAsync(IEnumerable<OperationViewModel> source) => RunOperationsAsync(source.Where(x => x.IsSelected).ToList());
 
@@ -258,6 +263,7 @@ public sealed class MainViewModel : ObservableObject
         foreach (var item in Diagnostics.Concat(SafeRepairs).Concat(ExpertRepairs)) item.SetLanguage(language);
         FilteredDiagnostics.Refresh();
         foreach (var finding in Findings) finding.SetLanguage(language);
+        SessionHistory.RefreshLanguage();
     }
 }
 

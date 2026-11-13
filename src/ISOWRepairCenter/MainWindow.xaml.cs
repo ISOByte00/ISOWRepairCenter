@@ -15,6 +15,9 @@ public partial class MainWindow : Window
     private async void RunExpertRepairs_Click(object sender, RoutedEventArgs e) => await ViewModel.RunExpertRepairsAsync();
     private void Cancel_Click(object sender, RoutedEventArgs e) => ViewModel.Cancel();
     private void OpenSession_Click(object sender, RoutedEventArgs e) => ViewModel.OpenSessionFolder();
+    private async void RefreshSessionHistory_Click(object sender, RoutedEventArgs e) => await ViewModel.RefreshSessionHistoryAsync();
+    private async void CompareSessionHistory_Click(object sender, RoutedEventArgs e) => await ViewModel.CompareSessionHistoryAsync();
+    private void OpenHistoryReport_Click(object sender, RoutedEventArgs e) => ViewModel.OpenSelectedHistoryReport();
     private void About_Click(object sender, RoutedEventArgs e) => MessageBox.Show(ViewModel.L["AboutText"], ViewModel.L["About"], MessageBoxButton.OK, MessageBoxImage.Information);
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {

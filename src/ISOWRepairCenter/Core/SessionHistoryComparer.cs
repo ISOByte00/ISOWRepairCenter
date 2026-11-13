@@ -60,7 +60,11 @@ public sealed class SessionHistoryComparer
             if (current.TryGetValue(oldFinding.Key, out var newFinding))
             {
                 var eventComparison = IsEventFinding(oldFinding);
-                if (eventComparison && HasRepeatedHistoricalEvent(earlier, later))
+                if (eventComparison && !EventScopeIsComparable(earlier, later))
+                    entries.Add(Entry(oldFinding, newFinding, SessionHistoryChange.NotComparable, "Event-log collection scope was incomplete, failed, or different between sessions."));
+                else if (eventComparison && !HasSupportedEventEvidence(oldFinding, earlier, later))
+                    entries.Add(Entry(oldFinding, newFinding, SessionHistoryChange.NotComparable, "Event-log evidence was insufficient to compare this finding safely."));
+                else if (eventComparison && HasRepeatedHistoricalEvent(oldFinding, earlier, later))
                     entries.Add(Entry(oldFinding, newFinding, SessionHistoryChange.HistoricalEventRepeated, "The same collected historical event was present in both sessions; this does not establish a recurring new fault."));
                 else if (oldFinding.Severity != newFinding.Severity || oldFinding.Confidence != newFinding.Confidence)
                     entries.Add(Entry(oldFinding, newFinding, SessionHistoryChange.ChangedAssessment, "Severity or confidence changed; no health improvement is inferred."));
@@ -107,9 +111,16 @@ public sealed class SessionHistoryComparer
     private async Task<IReadOnlyList<SessionHistoryEventScope>> ReadEventScopesAsync(string directory, IReadOnlyList<StoredOperation> results, List<SessionHistoryIssue> issues, CancellationToken token)
     {
         var scopes = new List<SessionHistoryEventScope>();
-        foreach (var operation in results.Where(x => EventOperations.Contains(x.Id)))
+        foreach (var operation in results)
         {
-            var records = new HashSet<string>(StringComparer.Ordinal);
+            if (string.IsNullOrWhiteSpace(operation.Id))
+            {
+                issues.Add(Issue("results.json", "InvalidOperation", "An operation without an Id was ignored while reading event scope."));
+                continue;
+            }
+            if (!EventOperations.Contains(operation.Id)) continue;
+
+            var records = new List<SessionHistoryEventRecord>();
             DateTimeOffset? windowStart = null;
             var readable = string.Equals(operation.Outcome, "Succeeded", StringComparison.OrdinalIgnoreCase);
             foreach (var step in operation.Steps ?? Array.Empty<StoredStep>())
@@ -126,8 +137,9 @@ public sealed class SessionHistoryComparer
                     if (root.TryGetProperty("WindowStart", out var start) && DateTimeOffset.TryParse(start.GetString(), out var parsed)) windowStart = parsed;
                     foreach (var entry in events.EnumerateArray())
                     {
-                        var provider = GetString(entry, "ProviderName"); var id = GetString(entry, "Id"); var recordId = GetString(entry, "RecordId"); var time = GetString(entry, "TimeCreated");
-                        if (provider is not null && id is not null && recordId is not null && time is not null) records.Add($"{provider}|{id}|{recordId}|{time}");
+                        var logName = GetString(entry, "LogName"); var provider = GetString(entry, "ProviderName"); var id = GetString(entry, "Id"); var recordId = GetString(entry, "RecordId"); var time = GetString(entry, "TimeCreated");
+                        if (logName is null || provider is null || id is null || recordId is null || time is null) { readable = false; issues.Add(Issue(Path.GetFileName(path), "InvalidEventRecord", "An event record without LogName, ProviderName, Id, RecordId, or TimeCreated was ignored.")); continue; }
+                        records.Add(new SessionHistoryEventRecord(logName, recordId, provider, id, time));
                     }
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { readable = false; issues.Add(Issue(Path.GetFileName(path), "EventOutputUnreadable", ex.Message)); }
@@ -148,8 +160,25 @@ public sealed class SessionHistoryComparer
     private static bool IsEventFinding(SessionHistoryFinding finding) => finding.OperationId.Equals("event-log-analysis", StringComparison.Ordinal);
     private static bool EventScopeIsComparable(SessionHistorySession first, SessionHistorySession second) =>
         first.EventScopes.Where(x => x.Readable).Select(x => x.OperationId).Order().SequenceEqual(second.EventScopes.Where(x => x.Readable).Select(x => x.OperationId).Order()) && first.EventScopes.Any(x => x.Readable) && second.EventScopes.Any(x => x.Readable);
-    private static bool HasRepeatedHistoricalEvent(SessionHistorySession first, SessionHistorySession second) =>
-        first.EventScopes.SelectMany(x => x.Records).Intersect(second.EventScopes.SelectMany(x => x.Records), StringComparer.Ordinal).Any();
+    private static bool HasSupportedEventEvidence(SessionHistoryFinding finding, SessionHistorySession first, SessionHistorySession second)
+    {
+        var predicate = EventPredicate(finding);
+        return predicate is not null && first.EventScopes.SelectMany(x => x.Records).Any(predicate) && second.EventScopes.SelectMany(x => x.Records).Any(predicate);
+    }
+    private static bool HasRepeatedHistoricalEvent(SessionHistoryFinding finding, SessionHistorySession first, SessionHistorySession second)
+    {
+        var predicate = EventPredicate(finding);
+        if (predicate is null) return false;
+        var earlier = first.EventScopes.SelectMany(x => x.Records).Where(predicate).Select(x => x.Key).ToHashSet(StringComparer.Ordinal);
+        return second.EventScopes.SelectMany(x => x.Records).Where(predicate).Select(x => x.Key).Any(earlier.Contains);
+    }
+    private static Func<SessionHistoryEventRecord, bool>? EventPredicate(SessionHistoryFinding finding) => finding.Code switch
+    {
+        "nvme-reset-events" => x => x.ProviderName.Equals("stornvme", StringComparison.OrdinalIgnoreCase) && x.EventId == "129",
+        "ntfs-integrity-events" => x => x.ProviderName.Equals("ntfs", StringComparison.OrdinalIgnoreCase) && x.EventId is "55" or "57",
+        "disk-retry-events" => x => x.ProviderName.Equals("disk", StringComparison.OrdinalIgnoreCase) && x.EventId == "153",
+        _ => null
+    };
     private static SessionHistoryComparisonEntry Entry(SessionHistoryFinding? oldFinding, SessionHistoryFinding? newFinding, SessionHistoryChange change, string explanation) => new(oldFinding?.Key ?? newFinding!.Key, oldFinding, newFinding, change, explanation);
     private static SessionHistoryIssue Issue(string file, string code, string message) => new(file, code, message);
     private static string? GetString(JsonElement element, string name) => element.TryGetProperty(name, out var value) ? value.ToString() : null;
@@ -169,7 +198,9 @@ public sealed record SessionHistorySession(string Directory, IReadOnlyList<Sessi
 public sealed record SessionHistoryFinding(string Code, string OperationId, FindingSeverity? Severity, FindingConfidence? Confidence)
 { public string Key => $"{OperationId}\u001f{Code}"; }
 public sealed record SessionHistoryOperation(string Id, OperationOutcome? Outcome, bool Succeeded);
-public sealed record SessionHistoryEventScope(string OperationId, bool Readable, DateTimeOffset? WindowStart, IReadOnlySet<string> Records);
+public sealed record SessionHistoryEventRecord(string LogName, string RecordId, string ProviderName, string EventId, string TimeCreated)
+{ public string Key => $"{LogName}\u001f{RecordId}"; }
+public sealed record SessionHistoryEventScope(string OperationId, bool Readable, DateTimeOffset? WindowStart, IReadOnlyList<SessionHistoryEventRecord> Records);
 public sealed record SessionHistoryIssue(string File, string Code, string Message);
 public enum SessionHistoryChange { NewlyObserved, Persisting, NotObserved, ChangedAssessment, NotComparable, HistoricalEventRepeated }
 public sealed record SessionHistoryComparisonEntry(string Key, SessionHistoryFinding? Earlier, SessionHistoryFinding? Later, SessionHistoryChange Change, string Explanation);

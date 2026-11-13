@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 - 2026-11-13
 
 - Hardened v0.6 repair verification: DISM and SFC baseline changes are assessed independently, with explicit evidence and no improvement claim for an already healthy baseline or a mixed regression.
 - Kept baseline, repair, and post-check cancellation distinct; post-check errors and restart-deferred checks now preserve the repair result without claiming verified success.
@@ -10,12 +10,16 @@
 - Added an instant Diagnostics search box without changing selections or run behavior.
 - Added a localized Dashboard finding summary and severity-specific visual labels.
 - Added evidence-linked guided repair suggestions for DISM and SFC integrity findings; suggestions never select or start a repair.
-- Added a separate, testable post-repair verification model for the DISM/SFC repair workflow; it is not yet wired to execute from the UI.
+- Added a separate, testable post-repair verification model for the DISM/SFC repair workflow.
 - Wired the DISM/SFC post-repair verification into the user-approved Safe Repairs flow, command preview, session report, and separate verification JSON report.
 - Clarified that verified post-checks do not claim measured improvement without a pre-repair baseline, and report verification cancellation separately from repair cancellation.
-- Added a separate pre-repair baseline and conservative change-analysis model for the DISM/SFC repair workflow; UI execution is not yet enabled.
+- Added a separate pre-repair baseline and conservative change-analysis model for the DISM/SFC repair workflow.
 - Added the user-approved pre-repair baseline to the DISM/SFC repair preview, session report, JSON artifacts, and conservative post-repair change assessment.
 - Persisted the selected application language and added restore-point attempt results to the session safety report.
+- Added a read-only Session History interface for listing local sessions, opening their reports, and comparing selected session pairs.
+- Added conservative Session History presentation for `NotObserved`, `NotComparable`, and recollected historical Event Log records.
+- Added Session History sorting, malformed-session handling, Turkish/English status localization, and ViewModel coverage.
+- Added portable ZIP and SHA-256 checksum generation to the release publish script.
 
 ## 0.5.0
 

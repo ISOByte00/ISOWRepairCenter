@@ -10,6 +10,9 @@
     <Product>ISOWRepairCenter</Product>
     <Company>ISOByte</Company>
     <Copyright>Copyright © 2026 ISOByte. All rights reserved.</Copyright>
-    <Version>0.5.0</Version>
+    <Version>0.6.0</Version>
+    <AssemblyVersion>0.6.0.0</AssemblyVersion>
+    <FileVersion>0.6.0.0</FileVersion>
+    <InformationalVersion>0.6.0</InformationalVersion>
   </PropertyGroup>
 </Project>

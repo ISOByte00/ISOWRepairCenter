@@ -2,6 +2,8 @@
 
 ISOWRepairCenter is an ISOByte Windows 10/11 x64 diagnostic and controlled-repair desktop application. It uses only built-in Windows tools and never starts an operation unless the user selects it and approves the command preview.
 
+Current prepared release: **v0.6.0**.
+
 ## Build
 
 Install the .NET 10 SDK, then run:
@@ -24,7 +26,7 @@ The script does not execute any Windows repair command.
 
 ## Portable executable
 
-Run `Publish-Portable.ps1` from PowerShell to produce a self-contained, single-file x64 executable at `dist\\ISOWRepairCenter\\ISOWRepairCenter.exe`. The generated executable does not require a separately installed .NET runtime.
+Run `Publish-Portable.ps1` from PowerShell to produce a self-contained, single-file x64 executable at `dist\\ISOWRepairCenter\\ISOWRepairCenter.exe`. It also creates `dist\\ISOWRepairCenter-0.6.0-win-x64.zip` and a matching `.sha256` checksum file. The generated executable does not require a separately installed .NET runtime.
 
 ## What it does
 
@@ -46,12 +48,16 @@ Diagnostic findings distinguish severity from confidence. `Known` findings have 
 
 For the DISM/SFC repair flow, `Verified` means the post-check recognized healthy results. `Improved` is reported only when a captured, recognized pre-repair problem changed to healthy without another tracked problem appearing. DISM and SFC change assessments are retained separately in `verifications.json` and the text/HTML reports.
 
+## Session history
+
+The Session History tab lists saved local sessions, opens the selected HTML/TXT report, and compares two selected sessions without running repairs or modifying session files. Its comparison results are deliberately conservative: `NotObserved` does not mean resolved, `NotComparable` remains visible when evidence is incomplete, and a recollected historical Event Log record is not treated as a new fault. Event matching uses `LogName + RecordId`; NVMe 129, NTFS 55/57, and Disk 153 use separate evidence rules.
+
 ## Safety limits
 
 This application cannot repair failed SSD/HDD hardware, RAM faults, firmware defects, or incorrect manual EFI partition selection. Verify backups before expert repairs and do not interrupt disk or boot work.
 
 ## Manual verification matrix
 
-Verify the UI and command preview on a Windows 10 x64 and Windows 11 x64 test machine. Exercise a read-only diagnostic, a deliberately failing command, cancellation of a long-running diagnostic, restore-point failure handling, DISM source validation, BCD backup failure handling, and the restart-required expert-operation prompts. Do not automate real disk or boot repairs in tests.
+Verify the UI and command preview on a Windows 10 x64 and Windows 11 x64 test machine. Exercise a read-only diagnostic, Session History refresh/comparison/report opening, a deliberately failing command, cancellation of a long-running diagnostic, restore-point failure handling, DISM source validation, BCD backup failure handling, and the restart-required expert-operation prompts. Do not automate real disk or boot repairs in tests.
 
 See [the manual test matrix](docs/ManualTestMatrix.md) for the verified and pending scenarios.
